@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // IMPORTANTE
+import '../pages/login_page.dart'; // IMPORTANTE para el Logout
 import '../pages/home_page.dart';
 import '../pages/search_page.dart';
 import '../pages/publish_page.dart';
@@ -8,30 +10,47 @@ import '../pages/mapa_viajes_screen.dart';
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
 
+  // Función para obtener el nombre guardado en SharedPreferences
+  Future<Map<String, String>> _getUserData() async {
+    final prefs = await SharedPreferences.getInstance();
+    return {
+      'name': prefs.getString('userName') ?? 'Usuario',
+      'email': prefs.getString('userEmail') ?? 'Tu comunidad de raites',
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     return Drawer(
-      child: Column( // Cambié a Column para poder poner el botón de cerrar sesión al final
+      child: Column(
         children: [
-          // Header con diseño más moderno
-          UserAccountsDrawerHeader(
-            decoration: BoxDecoration(
-              color: Colors.blue.shade800,
-              image: const DecorationImage(
-                image: NetworkImage('https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?q=80&w=2017&auto=format&fit=crop'),
-                fit: BoxFit.cover,
-                opacity: 0.4,
-              ),
-            ),
-            accountName: const Text(
-              'RouteMate',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            accountEmail: const Text('Tu comunidad de raites'),
-            currentAccountPicture: const CircleAvatar(
-              backgroundColor: Colors.white,
-              child: Icon(Icons.directions_car, size: 40, color: Colors.blue),
-            ),
+          // Header Dinámico con FutureBuilder
+          FutureBuilder<Map<String, String>>(
+            future: _getUserData(),
+            builder: (context, snapshot) {
+              final name = snapshot.data?['name'] ?? 'Cargando...';
+              final email = snapshot.data?['email'] ?? '...';
+
+              return UserAccountsDrawerHeader(
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade800,
+                  image: const DecorationImage(
+                    image: NetworkImage('https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?q=80&w=2017&auto=format&fit=crop'),
+                    fit: BoxFit.cover,
+                    opacity: 0.4,
+                  ),
+                ),
+                accountName: Text(
+                  name,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                accountEmail: Text(email),
+                currentAccountPicture: const CircleAvatar(
+                  backgroundColor: Colors.white,
+                  child: Icon(Icons.person, size: 40, color: Colors.blue),
+                ),
+              );
+            },
           ),
 
           // Lista de navegación
@@ -62,15 +81,32 @@ class AppDrawer extends StatelessWidget {
                 ),
                 const Divider(),
                 _buildMenuItem(
-                  icon: Icons.person_add_alt_1_rounded,
-                  title: 'Registro / Perfil',
+                  icon: Icons.person_outline_rounded,
+                  title: 'Mi Perfil / Registro',
                   onTap: () => _navigate(context, const RegisterPage()),
+                ),
+                
+                // BOTÓN DE CERRAR SESIÓN
+                ListTile(
+                  leading: const Icon(Icons.logout, color: Colors.red),
+                  title: const Text('Cerrar Sesión', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                  onTap: () async {
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.clear(); // Borra la sesión
+                    
+                    if (context.mounted) {
+                      Navigator.pushAndRemoveUntil(
+                        context,
+                        MaterialPageRoute(builder: (_) => const LoginPage()),
+                        (route) => false,
+                      );
+                    }
+                  },
                 ),
               ],
             ),
           ),
           
-          // Pie del Drawer (Opcional: Versión de la app o cerrar sesión)
           const Padding(
             padding: EdgeInsets.all(16.0),
             child: Text(
@@ -83,7 +119,6 @@ class AppDrawer extends StatelessWidget {
     );
   }
 
-  // Función para evitar repetir código de navegación
   void _navigate(BuildContext context, Widget page) {
     Navigator.pushReplacement(
       context,
@@ -91,7 +126,6 @@ class AppDrawer extends StatelessWidget {
     );
   }
 
-  // Widget personalizado para los items del menú
   Widget _buildMenuItem({
     required IconData icon,
     required String title,
