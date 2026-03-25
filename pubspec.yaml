@@ -16,6 +16,7 @@ dependencies:
   geolocator: ^10.1.0 # Versión estable para tu rango de SDK
   intl: ^0.18.1       # Útil para formatear fechas y dinero en el Dashboard
   shared_preferences: ^2.2.2 #Guardar sesiones
+  image_picker: ^1.0.4 #Para abrir la galeria
 
   # --- MAPAS ---
   flutter_map: ^6.1.0 # Versión probada y estable para Web/Vercel
