@@ -2,10 +2,14 @@
   "version": 2,
   "public": true,
   "framework": null,
-  "installCommand": "flutter/bin/flutter config --enable-web",
+  "installCommand": "bash install-flutter.sh",
   "buildCommand": "flutter/bin/flutter build web --release",
   "outputDirectory": "build/web",
   "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
     {
       "source": "/(.*)",
       "destination": "/index.html"
