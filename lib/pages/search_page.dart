@@ -14,9 +14,10 @@ class SearchPage extends StatefulWidget {
   State<SearchPage> createState() => _SearchPageState();
 }
 
-class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateMixin {
+class _SearchPageState extends State<SearchPage>
+    with SingleTickerProviderStateMixin {
   String modo = "publicados";
-  
+
   final ApiService _apiService = ApiService();
   final _origenBusqueda = TextEditingController();
   final _destinoBusqueda = TextEditingController();
@@ -37,12 +38,14 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
   void initState() {
     super.initState();
     _controller = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 400));
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
     _fade = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
     _controller.forward();
-    
+
     _cargarDatosUsuario(); // Carga de SharedPreferences
-    _cargarViajes();      // Carga de API
+    _cargarViajes(); // Carga de API
   }
 
   // MODIFICADO: Unificado con las llaves del Login (userName y userEmail)
@@ -126,39 +129,54 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
     bool yaSolicitado = pasajeros.any((p) => p['email'] == _emailReal);
     if (yaSolicitado) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Ya enviaste una solicitud para este viaje.")),
+        const SnackBar(
+          content: Text("Ya enviaste una solicitud para este viaje."),
+        ),
       );
       return;
     }
 
-    bool confirmar = await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Confirmar Solicitud"),
-        content: Text("Hola $_nombreReal, ¿quieres enviar una solicitud para el viaje a ${viaje['destino']}?"),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("No")),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Sí, enviar")),
-        ],
-      ),
-    ) ?? false;
+    bool confirmar =
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text("Confirmar Solicitud"),
+            content: Text(
+              "Hola $_nombreReal, ¿quieres enviar una solicitud para el viaje a ${viaje['destino']}?",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text("No"),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text("Sí, enviar"),
+              ),
+            ],
+          ),
+        ) ??
+        false;
 
     if (confirmar) {
       // Manejo dinámico de ID (id o _id)
       final viajeId = (viaje['id'] ?? viaje['_id']).toString();
 
       bool exito = await _apiService.reservarViaje(
-        viajeId: viajeId, 
+        viajeId: viajeId,
         pasajeroEmail: _emailReal,
-        pasajeroNombre: _nombreReal
+        pasajeroNombre: _nombreReal,
       );
 
       if (exito) {
-        _cargarViajes(); // Recargar para actualizar UI
+        // MUY IMPORTANTE: Recargar los viajes de la API para ver el nuevo estado
+        await _cargarViajes();
+
         if (mounted) {
+          setState(() {}); // Forzar a Flutter a repintar los botones
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text("Solicitud enviada correctamente."),
+              content: Text("¡Solicitud enviada! El conductor la revisará."),
               backgroundColor: Colors.green,
             ),
           );
@@ -170,9 +188,11 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
   // MODIFICADO: Lógica de estados en el botón
   Widget viajeCard(Map viaje) {
     List pasajerosActuales = viaje['pasajeros'] ?? [];
-    
+
     // Contamos cupos ocupados basándonos en los confirmados
-    int ocupados = pasajerosActuales.where((p) => p['estado'] == 'confirmado').length;
+    int ocupados = pasajerosActuales
+        .where((p) => p['estado'] == 'confirmado')
+        .length;
     int cupoTotal = int.tryParse(viaje['capacidad'].toString()) ?? 0;
     int disponibles = cupoTotal - ocupados;
 
@@ -193,15 +213,31 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    _infoRow(Icons.location_on, "Salida:", viaje["origen"] ?? "N/A", Colors.blue),
-                    _infoRow(Icons.flag, "Destino:", viaje["destino"] ?? "N/A", Colors.red),
+                    _infoRow(
+                      Icons.location_on,
+                      "Salida:",
+                      viaje["origen"] ?? "N/A",
+                      Colors.blue,
+                    ),
+                    _infoRow(
+                      Icons.flag,
+                      "Destino:",
+                      viaje["destino"] ?? "N/A",
+                      Colors.red,
+                    ),
                     const Divider(),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         _miniInfo(Icons.access_time, viaje["hora"] ?? "--:--"),
-                        _miniInfo(Icons.people, "Libres: $disponibles de $cupoTotal"),
-                        _miniInfo(Icons.attach_money, "Cuota: \$${viaje["cuota"]}"),
+                        _miniInfo(
+                          Icons.people,
+                          "Libres: $disponibles de $cupoTotal",
+                        ),
+                        _miniInfo(
+                          Icons.attach_money,
+                          "Cuota: \$${viaje["cuota"]}",
+                        ),
                       ],
                     ),
                   ],
@@ -215,19 +251,22 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: yaSolicitado || esMiPropioViaje
-                        ? Colors.orange 
-                        : (disponibles > 0 ? Colors.blue.shade700 : Colors.grey),
+                        ? Colors.orange
+                        : (disponibles > 0
+                              ? Colors.blue.shade700
+                              : Colors.grey),
                     foregroundColor: Colors.white,
                   ),
-                  onPressed: (disponibles > 0 && !yaSolicitado && !esMiPropioViaje) 
-                      ? () => _gestionarReserva(viaje) 
+                  onPressed:
+                      (disponibles > 0 && !yaSolicitado && !esMiPropioViaje)
+                      ? () => _gestionarReserva(viaje)
                       : null,
                   child: Text(
-                    esMiPropioViaje 
-                      ? "TU VIAJE" 
-                      : yaSolicitado 
-                        ? "SOLICITUD ENVIADA" 
-                        : (disponibles > 0 ? "SOLICITAR LUGAR" : "VIAJE LLENO")
+                    esMiPropioViaje
+                        ? "TU VIAJE"
+                        : yaSolicitado
+                        ? "SOLICITUD ENVIADA"
+                        : (disponibles > 0 ? "SOLICITAR LUGAR" : "VIAJE LLENO"),
                   ),
                 ),
               ),
@@ -260,7 +299,11 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
     );
   }
 
-  Widget buildInput(String label, IconData icon, TextEditingController controller) {
+  Widget buildInput(
+    String label,
+    IconData icon,
+    TextEditingController controller,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: TextField(
@@ -289,7 +332,10 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
     return Scaffold(
       backgroundColor: Colors.grey.shade100,
       appBar: AppBar(
-        title: const Text("Buscar raite", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          "Buscar raite",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         centerTitle: true,
       ),
       drawer: const AppDrawer(),
@@ -314,45 +360,56 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
                   minWidth: (MediaQuery.of(context).size.width - 40) / 2,
                   minHeight: 45,
                 ),
-                children: const [
-                  Text("Disponibles"),
-                  Text("Filtrar Búsqueda"),
-                ],
+                children: const [Text("Disponibles"), Text("Filtrar Búsqueda")],
               ),
             ),
             Expanded(
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 300),
-                child: modo == "publicados" 
-                  ? _estaCargando 
-                      ? const Center(child: CircularProgressIndicator())
-                      : _viajesFiltrados.isEmpty 
-                        ? const Center(child: Text("No se encontraron viajes."))
-                        : ListView(
-                            padding: const EdgeInsets.all(16),
-                            children: _viajesFiltrados.map((v) => viajeCard(v)).toList(),
-                          )
-                  : SingleChildScrollView(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        children: [
-                          buildInput("¿De dónde sales?", Icons.location_on, _origenBusqueda),
-                          buildInput("¿A dónde vas?", Icons.flag, _destinoBusqueda),
-                          const SizedBox(height: 20),
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue.shade800,
-                              foregroundColor: Colors.white,
-                              minimumSize: const Size(double.infinity, 55),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                child: modo == "publicados"
+                    ? _estaCargando
+                          ? const Center(child: CircularProgressIndicator())
+                          : _viajesFiltrados.isEmpty
+                          ? const Center(
+                              child: Text("No se encontraron viajes."),
+                            )
+                          : ListView(
+                              padding: const EdgeInsets.all(16),
+                              children: _viajesFiltrados
+                                  .map((v) => viajeCard(v))
+                                  .toList(),
+                            )
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          children: [
+                            buildInput(
+                              "¿De dónde sales?",
+                              Icons.location_on,
+                              _origenBusqueda,
                             ),
-                            onPressed: _aplicarFiltro,
-                            icon: const Icon(Icons.search),
-                            label: const Text("BUSCAR AHORA"),
-                          ),
-                        ],
+                            buildInput(
+                              "¿A dónde vas?",
+                              Icons.flag,
+                              _destinoBusqueda,
+                            ),
+                            const SizedBox(height: 20),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue.shade800,
+                                foregroundColor: Colors.white,
+                                minimumSize: const Size(double.infinity, 55),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(15),
+                                ),
+                              ),
+                              onPressed: _aplicarFiltro,
+                              icon: const Icon(Icons.search),
+                              label: const Text("BUSCAR AHORA"),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
               ),
             ),
           ],

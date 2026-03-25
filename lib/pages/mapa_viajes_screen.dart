@@ -6,9 +6,9 @@ import '../widgets/app_drawer.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:intl/intl.dart'; // Para manejar horas y fechas
+import 'package:url_launcher/url_launcher.dart';
 
 class MapaViajesScreen extends StatefulWidget {
-
   final LatLng? centroInicial;
   const MapaViajesScreen({super.key, this.centroInicial});
 
@@ -25,28 +25,31 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
       final response = await http.get(Uri.parse(_apiUrl));
       if (response.statusCode == 200) {
         List<dynamic> todosLosViajes = jsonDecode(response.body);
-        
+
         // --- LÓGICA DE CADUCIDAD ---
         // Filtramos para que solo aparezcan viajes cuya hora no haya pasado
         DateTime ahora = DateTime.now();
-        
+
         return todosLosViajes.where((viaje) {
           try {
             // Asumimos que guardamos 'fecha_publicacion' o un campo 'hora' ISO8601
             // Si guardas solo texto como "08:30 PM", la lógica requiere un parseo más complejo
-            DateTime fechaViaje = DateTime.parse(viaje['fecha_publicacion'] ?? ahora.toString());
-            return fechaViaje.isAfter(ahora.subtract(const Duration(hours: 2))); // Ejemplo: Caduca 2h después
+            DateTime fechaViaje = DateTime.parse(
+              viaje['fecha_publicacion'] ?? ahora.toString(),
+            );
+            return fechaViaje.isAfter(
+              ahora.subtract(const Duration(hours: 2)),
+            ); // Ejemplo: Caduca 2h después
           } catch (e) {
             return true; // Si hay error de formato, lo mostramos por si acaso
           }
         }).toList();
-        
       } else {
         return [];
       }
     } catch (e) {
       debugPrint("Error conectando al mapa: $e");
-      return []; 
+      return [];
     }
   }
 
@@ -64,18 +67,38 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10))),
+              Container(
+                width: 50,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
               const SizedBox(height: 20),
               ListTile(
-                leading: const CircleAvatar(backgroundColor: Colors.blue, child: Icon(Icons.person, color: Colors.white)),
-                title: Text("${viaje['origen']} ➔ ${viaje['destino']}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                leading: const CircleAvatar(
+                  backgroundColor: Colors.blue,
+                  child: Icon(Icons.person, color: Colors.white),
+                ),
+                title: Text(
+                  "${viaje['origen']} ➔ ${viaje['destino']}",
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
                 subtitle: Text("Sale a las: ${viaje['hora']}"),
               ),
               const Divider(),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _datoExtra(Icons.attach_money, "Cuota", "\$${viaje['cuota']}"),
+                  _datoExtra(
+                    Icons.attach_money,
+                    "Cuota",
+                    "\$${viaje['cuota']}",
+                  ),
                   _datoExtra(Icons.people, "Lugares", "${viaje['capacidad']}"),
                   _datoExtra(Icons.timer, "Duración", "${viaje['duracion']}"),
                 ],
@@ -85,11 +108,47 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue.shade800,
                   minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
-                onPressed: () => Navigator.pop(context),
-                child: const Text("Contactar Conductor", style: TextStyle(color: Colors.white)),
-              )
+                onPressed: () async {
+                  // Obtenemos el email que viene en los datos del viaje
+                  final String? emailConductor = viaje['conductorEmail'];
+                  final String destino = viaje['destino'] ?? "tu destino";
+
+                  if (emailConductor != null && emailConductor.isNotEmpty) {
+                    final Uri emailUri = Uri(
+                      scheme: 'mailto',
+                      path: emailConductor,
+                      query:
+                          'subject=Interés en tu raite a $destino&body=Hola, vi tu viaje en RouteMate y me gustaría contactarte.',
+                    );
+
+                    if (await canLaunchUrl(emailUri)) {
+                      await launchUrl(emailUri);
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("No se pudo abrir la app de correo"),
+                        ),
+                      );
+                    }
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          "El conductor no proporcionó un correo válido",
+                        ),
+                      ),
+                    );
+                  }
+                },
+                child: const Text(
+                  "Contactar Conductor",
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
             ],
           ),
         );
@@ -112,7 +171,10 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text("Explorar Raites", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        title: const Text(
+          "Explorar Raites",
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.white.withOpacity(0.9),
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
@@ -128,8 +190,10 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
           // Generar marcadores
           List<Marker> marcadores = (snapshot.data ?? []).map((viaje) {
             // Coordenadas por defecto (Colima) si no hay reales
-            double lat = viaje['latitud'] ?? 19.2620 + (0.005 * (viaje['id'] % 10)); 
-            double lng = viaje['longitud'] ?? -103.7229 + (0.005 * (viaje['id'] % 5));
+            double lat =
+                viaje['latitud'] ?? 19.2620 + (0.005 * (viaje['id'] % 10));
+            double lng =
+                viaje['longitud'] ?? -103.7229 + (0.005 * (viaje['id'] % 5));
 
             return Marker(
               point: LatLng(lat, lng),
@@ -142,9 +206,15 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
                     color: Colors.blue.shade800,
                     shape: BoxShape.circle,
                     border: Border.all(color: Colors.white, width: 2),
-                    boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 5)],
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black26, blurRadius: 5),
+                    ],
                   ),
-                  child: const Icon(Icons.directions_car_filled, color: Colors.white, size: 25),
+                  child: const Icon(
+                    Icons.directions_car_filled,
+                    color: Colors.white,
+                    size: 25,
+                  ),
                 ),
               ),
             );

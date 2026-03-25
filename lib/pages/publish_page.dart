@@ -47,22 +47,30 @@ class _PublishPageState extends State<PublishPage> {
       return;
     }
 
+    // --- NUEVO: Obtener datos del usuario logueado ---
+    final prefs = await SharedPreferences.getInstance();
+    final String nombreConductor = prefs.getString('userName') ?? "Conductor";
+    final String emailConductor = prefs.getString('userEmail') ?? "";
+
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text("Publicando viaje...")));
 
-    // Creamos el JSON incluyendo las coordenadas del mapa
+    // MODIFICADO: Incluimos los datos del conductor en el JSON
     final Map<String, dynamic> requestBody = {
+      'conductor': nombreConductor, // Para que no salga "Anon"
+      'conductorEmail': emailConductor, // Para filtrar en "Mis Viajes"
       'origen': _origenController.text,
       'destino': _destinoController.text,
-      'latitud': _puntoSeleccionado.latitude, // Coordenada elegida en el mapa
-      'longitud': _puntoSeleccionado.longitude, // Coordenada elegida en el mapa
+      'latitud': _puntoSeleccionado.latitude,
+      'longitud': _puntoSeleccionado.longitude,
       'hora': _horaController.text,
       'cuota': _cuotaController.text,
       'capacidad': _capacidadController.text,
       'duracion': _duracionController.text,
       'fecha_publicacion': DateTime.now().toIso8601String(),
       'estado': 'Activo',
+      'pasajeros': [], // Inicializamos la lista de pasajeros vacía
     };
 
     try {
