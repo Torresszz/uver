@@ -53,7 +53,7 @@ class ApiService {
   // SECCIÓN: VIAJES Y RESERVAS
   // ---------------------------------------------------------
 
-  // 1. Reservar (Pasajero envía solicitud inicial)
+  // 1. Reservar (Pasajero envía solicitud inicial) -> Apunta a api/reservas.js
   Future<bool> reservarViaje({
     required String viajeId,
     required String pasajeroEmail,
@@ -67,7 +67,7 @@ class ApiService {
           'viajeId': viajeId,
           'pasajeroEmail': pasajeroEmail,
           'pasajeroNombre': pasajeroNombre,
-          'estado': 'pendiente',
+          // 'estado': 'pendiente', // El backend ya lo asigna por defecto, pero no estorba
         }),
       );
       return response.statusCode == 200 || response.statusCode == 201;
@@ -77,11 +77,12 @@ class ApiService {
     }
   }
 
-  // 2. Decidir (Conductor acepta o rechaza)
+  // 2. Decidir (Conductor acepta o rechaza) -> Apunta a api/decidir.js
   Future<bool> decidirSolicitud(String viajeId, String pasajeroEmail, String accion) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrlViajes/decidir'),
+        // CORRECCIÓN: Quitamos el '/viajes' de la ruta
+        Uri.parse('https://uver-oxnw.vercel.app/api/decidir'), 
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'viajeId': viajeId,
@@ -89,6 +90,11 @@ class ApiService {
           'accion': accion, // 'aceptar' o 'rechazar'
         }),
       );
+      
+      if (response.statusCode != 200) {
+        debugPrint("Error API decidir: ${response.statusCode} - ${response.body}");
+      }
+      
       return response.statusCode == 200;
     } catch (e) {
       debugPrint("Error en decidirSolicitud: $e");
@@ -96,22 +102,28 @@ class ApiService {
     }
   }
 
-  // 3. Cancelar (Pasajero se arrepiente y se elimina de la lista)
+  //Cancelar Solicitud
   Future<bool> cancelarSolicitud(String viajeId, String pasajeroEmail) async {
-    try {
-      final response = await http.delete(
-        Uri.parse('https://uver-oxnw.vercel.app/api/viajes/cancelar-reserva'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'viajeId': viajeId,
-          'pasajeroEmail': pasajeroEmail,
-        }),
-      );
-      // Retornamos true si el servidor confirma la eliminación
-      return response.statusCode == 200;
-    } catch (e) {
-      debugPrint("Error en cancelarSolicitud: $e");
-      return false;
+  try {
+    final response = await http.delete(
+      Uri.parse('https://uver-oxnw.vercel.app/api/cancelar-reserva'),
+      headers: {
+        'Content-Type': 'application/json', // <--- OBLIGATORIO para que el body se lea
+      },
+      body: json.encode({
+        'viajeId': viajeId,
+        'pasajeroEmail': pasajeroEmail,
+      }),
+    );
+    
+    if (response.statusCode != 200) {
+      debugPrint("Error al cancelar: ${response.body}");
     }
+    
+    return response.statusCode == 200;
+  } catch (e) {
+    debugPrint("Error en cancelarSolicitud: $e");
+    return false;
   }
+}
 }
