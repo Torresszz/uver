@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../widgets/app_drawer.dart';
 import '../api_service.dart';
 
 class MisViajesConductor extends StatefulWidget {
@@ -75,6 +76,7 @@ class _MisViajesConductorState extends State<MisViajesConductor> {
         backgroundColor: Colors.blue.shade800,
         foregroundColor: Colors.white,
       ),
+      drawer: const AppDrawer(),
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator())
         : _misViajes.isEmpty 

@@ -13,13 +13,13 @@ class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
 
   Future<Map<String, String>> _getUserData() async {
-    final prefs = await SharedPreferences.getInstance();
-    return {
-      'name': prefs.getString('userName') ?? 'Usuario',
-      'email': prefs.getString('userEmail') ?? 'Tu comunidad de raites',
-      'role': prefs.getString('userRole') ?? 'peaton',
-    };
-  }
+  final prefs = await SharedPreferences.getInstance();
+  return {
+    'name': prefs.getString('userName') ?? 'Usuario', 
+    'email': prefs.getString('userEmail') ?? 'Tu comunidad de raites',
+    'role': prefs.getString('userRole') ?? 'peaton',
+  };
+}
 
   @override
   Widget build(BuildContext context) {

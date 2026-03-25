@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart'; // Necesario para el mapa
 import 'package:latlong2/latlong.dart';       // Necesario para las coordenadas
 import '../widgets/app_drawer.dart';
 import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 
 class PublishPage extends StatefulWidget {
@@ -119,6 +120,17 @@ class _PublishPageState extends State<PublishPage> {
 
   @override
   Widget build(BuildContext context) {
+  return FutureBuilder<SharedPreferences>(
+    future: SharedPreferences.getInstance(),
+    builder: (context, snapshot) {
+      if (snapshot.hasData) {
+        String rol = snapshot.data!.getString('userRole') ?? 'peaton';
+        if (rol != 'chofer' && rol != 'conductor') {
+          return const Scaffold(
+            body: Center(child: Text("No tienes permiso para publicar viajes.")),
+          );
+        }
+      }
     return Scaffold(
       appBar: AppBar(
         title: const Text('Publicar viaje', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), 

@@ -34,6 +34,27 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
+  Future<void> _mostrarDialogoEliminar(String email) async {
+  bool confirmar = await showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text("¿Eliminar usuario?"),
+      content: Text("Esta acción eliminará permanentemente a $email."),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancelar")),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, true), 
+          child: const Text("Eliminar", style: TextStyle(color: Colors.red))
+        ),
+      ],
+    ),
+  ) ?? false;
+
+  if (confirmar) {
+    _actualizarEstado(email, "Eliminado");
+  }
+}
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -240,24 +261,54 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   DataRow _buildUserRow(dynamic user) {
-    String estado = user['estado'] ?? 'Pendiente';
-    return DataRow(cells: [
-      DataCell(Text(user['nombre'] ?? 'N/A')),
-      DataCell(Text(user['email'] ?? 'N/A')),
-      DataCell(Text(user['rol']?.toString().toUpperCase() ?? 'USER')),
-      DataCell(Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(color: estado == "Pendiente" ? Colors.orange[50] : Colors.green[50], borderRadius: BorderRadius.circular(8)),
-        child: Text(estado, style: TextStyle(color: estado == "Pendiente" ? Colors.orange[900] : Colors.green[900], fontWeight: FontWeight.bold, fontSize: 12)),
-      )),
-      DataCell(Row(
-        children: [
-          IconButton(icon: const Icon(Icons.check_circle, color: Colors.green), onPressed: estado == "Pendiente" ? () => _actualizarEstado(user['email'], "Aceptado") : null),
-          IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => _actualizarEstado(user['email'], "Eliminado")),
-        ],
-      )),
-    ]);
-  }
+  String estado = user['estado'] ?? 'Pendiente';
+  String rol = user['rol']?.toString().toLowerCase() ?? 'peaton';
+  
+  // Lógica: Solo los conductores (o choferes) pueden ser aprobados
+  bool esConductor = (rol == 'conductor' || rol == 'chofer');
+  bool estaPendiente = (estado == "Pendiente" || estado == "pendiente");
+
+  return DataRow(cells: [
+    DataCell(Text(user['nombre'] ?? 'N/A')),
+    DataCell(Text(user['email'] ?? 'N/A')),
+    DataCell(Text(rol.toUpperCase())),
+    DataCell(Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: estaPendiente ? Colors.orange[50] : Colors.green[50], 
+        borderRadius: BorderRadius.circular(8)
+      ),
+      child: Text(
+        estado, 
+        style: TextStyle(
+          color: estaPendiente ? Colors.orange[900] : Colors.green[900], 
+          fontWeight: FontWeight.bold, 
+          fontSize: 12
+        )
+      ),
+    )),
+    DataCell(Row(
+      children: [
+        // BOTÓN APROBAR: Solo aparece si es conductor Y está pendiente
+        if (esConductor && estaPendiente)
+          IconButton(
+            icon: const Icon(Icons.check_circle, color: Colors.green),
+            tooltip: "Aprobar Conductor",
+            onPressed: () => _actualizarEstado(user['email'], "Aceptado"),
+          )
+        else if (!esConductor)
+          const SizedBox(width: 48), // Espacio vacío para mantener la alineación si no es conductor
+
+        // BOTÓN ELIMINAR: Siempre visible para todos
+        IconButton(
+          icon: const Icon(Icons.delete, color: Colors.red),
+          tooltip: "Eliminar Usuario",
+          onPressed: () => _mostrarDialogoEliminar(user['email']),
+        ),
+      ],
+    )),
+  ]);
+}
 
   Widget _tablaCardViajes(List<dynamic> viajes) {
     return Container(

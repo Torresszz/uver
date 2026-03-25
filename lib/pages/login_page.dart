@@ -52,15 +52,15 @@ class _LoginPageState extends State<LoginPage> {
             // Dentro de tu _intentarLogin en LoginPage.dart
             await prefs.setBool('isLoggedIn', true);
             await prefs.setString(
-              'user_nombre',
+              'userName',
               usuarioEncontrado['nombre'] ?? 'Usuario',
-            ); // Cambiado a user_nombre
+            );
             await prefs.setString(
-              'user_email',
+              'userEmail',
               usuarioEncontrado['email'] ?? email,
-            ); // Cambiado a user_email
+            );
             await prefs.setString(
-              'user_rol',
+              'userRole',
               usuarioEncontrado['rol'] ?? 'peaton',
             );
 
@@ -71,9 +71,10 @@ class _LoginPageState extends State<LoginPage> {
                   backgroundColor: Colors.green,
                 ),
               );
-              Navigator.pushReplacement(
+              Navigator.pushAndRemoveUntil(
                 context,
                 MaterialPageRoute(builder: (_) => const HomePage()),
+                (route) => false,
               );
             }
           } else {

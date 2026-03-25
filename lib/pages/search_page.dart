@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Importante para la Opción B
+import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/app_drawer.dart';
 import 'mapa_viajes_screen.dart';
 import 'dart:convert';
@@ -8,15 +8,13 @@ import 'package:latlong2/latlong.dart';
 import '../api_service.dart';
 
 class SearchPage extends StatefulWidget {
-  // Eliminamos los parámetros obligatorios, ahora la página es independiente
   const SearchPage({super.key});
 
   @override
   State<SearchPage> createState() => _SearchPageState();
 }
 
-class _SearchPageState extends State<SearchPage>
-    with SingleTickerProviderStateMixin {
+class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateMixin {
   String modo = "publicados";
   
   final ApiService _apiService = ApiService();
@@ -43,11 +41,11 @@ class _SearchPageState extends State<SearchPage>
     _fade = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
     _controller.forward();
     
-    _cargarDatosUsuario(); // 1. Cargamos quién es el usuario
-    _cargarViajes();       // 2. Cargamos los viajes de la API
+    _cargarDatosUsuario(); // Carga de SharedPreferences
+    _cargarViajes();      // Carga de API
   }
 
-  // Recupera el nombre y correo guardados en el dispositivo durante el Login
+  // MODIFICADO: Unificado con las llaves del Login (userName y userEmail)
   Future<void> _cargarDatosUsuario() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
@@ -67,7 +65,7 @@ class _SearchPageState extends State<SearchPage>
         });
       }
     } catch (e) {
-      debugPrint("Error: $e");
+      debugPrint("Error al cargar viajes: $e");
       setState(() => _estaCargando = false);
     }
   }
@@ -106,11 +104,29 @@ class _SearchPageState extends State<SearchPage>
     });
   }
 
+  // MODIFICADO: Validaciones de seguridad añadidas
   void _gestionarReserva(Map viaje) async {
-    // Usamos las variables cargadas de SharedPreferences
     if (_emailReal.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Error: No se encontró sesión activa.")),
+      );
+      return;
+    }
+
+    // Seguridad: El conductor no puede solicitar su propio viaje
+    if (viaje['conductorEmail'] == _emailReal) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("No puedes solicitar tu propio viaje.")),
+      );
+      return;
+    }
+
+    // Seguridad: Verificar si ya solicitó
+    List pasajeros = viaje['pasajeros'] ?? [];
+    bool yaSolicitado = pasajeros.any((p) => p['email'] == _emailReal);
+    if (yaSolicitado) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Ya enviaste una solicitud para este viaje.")),
       );
       return;
     }
@@ -128,29 +144,41 @@ class _SearchPageState extends State<SearchPage>
     ) ?? false;
 
     if (confirmar) {
+      // Manejo dinámico de ID (id o _id)
+      final viajeId = (viaje['id'] ?? viaje['_id']).toString();
+
       bool exito = await _apiService.reservarViaje(
-        viajeId: viaje['_id'], 
+        viajeId: viajeId, 
         pasajeroEmail: _emailReal,
         pasajeroNombre: _nombreReal
       );
 
       if (exito) {
-        // Refrescamos la lista para actualizar los cupos disponibles
-        _cargarViajes();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Solicitud enviada correctamente."),
-            backgroundColor: Colors.green,
-          ),
-        );
+        _cargarViajes(); // Recargar para actualizar UI
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Solicitud enviada correctamente."),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
       }
     }
   }
 
+  // MODIFICADO: Lógica de estados en el botón
   Widget viajeCard(Map viaje) {
     List pasajerosActuales = viaje['pasajeros'] ?? [];
+    
+    // Contamos cupos ocupados basándonos en los confirmados
+    int ocupados = pasajerosActuales.where((p) => p['estado'] == 'confirmado').length;
     int cupoTotal = int.tryParse(viaje['capacidad'].toString()) ?? 0;
-    int disponibles = cupoTotal - pasajerosActuales.length;
+    int disponibles = cupoTotal - ocupados;
+
+    // Verificar si el usuario ya está en este viaje
+    bool yaSolicitado = pasajerosActuales.any((p) => p['email'] == _emailReal);
+    bool esMiPropioViaje = viaje['conductorEmail'] == _emailReal;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -186,11 +214,21 @@ class _SearchPageState extends State<SearchPage>
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: disponibles > 0 ? Colors.blue.shade700 : Colors.grey,
+                    backgroundColor: yaSolicitado || esMiPropioViaje
+                        ? Colors.orange 
+                        : (disponibles > 0 ? Colors.blue.shade700 : Colors.grey),
                     foregroundColor: Colors.white,
                   ),
-                  onPressed: disponibles > 0 ? () => _gestionarReserva(viaje) : null,
-                  child: Text(disponibles > 0 ? "SOLICITAR LUGAR" : "VIAJE LLENO"),
+                  onPressed: (disponibles > 0 && !yaSolicitado && !esMiPropioViaje) 
+                      ? () => _gestionarReserva(viaje) 
+                      : null,
+                  child: Text(
+                    esMiPropioViaje 
+                      ? "TU VIAJE" 
+                      : yaSolicitado 
+                        ? "SOLICITUD ENVIADA" 
+                        : (disponibles > 0 ? "SOLICITAR LUGAR" : "VIAJE LLENO")
+                  ),
                 ),
               ),
             ),
