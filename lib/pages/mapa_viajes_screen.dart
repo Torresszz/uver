@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import '../pages/home_page.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:intl/intl.dart'; // Para manejar horas y fechas
 
 class MapaViajesScreen extends StatefulWidget {
   const MapaViajesScreen({super.key});
@@ -13,74 +14,79 @@ class MapaViajesScreen extends StatefulWidget {
 }
 
 class _MapaViajesScreenState extends State<MapaViajesScreen> {
-  // Variable para el filtro
-  String filtroActual = "Todos";
+  // URL de tu API de viajes en Vercel
+  final String _apiUrl = 'https://uver-oxnw.vercel.app/api/viajes';
 
-  // 1. CONSUMO DE LA API (GET)
   Future<List<dynamic>> obtenerViajes() async {
-  // Al usar solo '/api/reports', funcionará perfecto en Vercel
-  // Para probar local, asegúrate de que tu server node corra en el mismo dominio
-  final url = Uri.parse('/api/reports'); 
-  
-  try {
-    final response = await http.get(url);
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
-    } else {
-      throw Exception('Error: ${response.statusCode}');
+    try {
+      final response = await http.get(Uri.parse(_apiUrl));
+      if (response.statusCode == 200) {
+        List<dynamic> todosLosViajes = jsonDecode(response.body);
+        
+        // --- LÓGICA DE CADUCIDAD ---
+        // Filtramos para que solo aparezcan viajes cuya hora no haya pasado
+        DateTime ahora = DateTime.now();
+        
+        return todosLosViajes.where((viaje) {
+          try {
+            // Asumimos que guardamos 'fecha_publicacion' o un campo 'hora' ISO8601
+            // Si guardas solo texto como "08:30 PM", la lógica requiere un parseo más complejo
+            DateTime fechaViaje = DateTime.parse(viaje['fecha_publicacion'] ?? ahora.toString());
+            return fechaViaje.isAfter(ahora.subtract(const Duration(hours: 2))); // Ejemplo: Caduca 2h después
+          } catch (e) {
+            return true; // Si hay error de formato, lo mostramos por si acaso
+          }
+        }).toList();
+        
+      } else {
+        return [];
+      }
+    } catch (e) {
+      debugPrint("Error conectando al mapa: $e");
+      return []; 
     }
-  } catch (e) {
-    // Si falla la ruta relativa (en local), puedes poner un fallback
-    print("Error conectando: $e");
-    return []; 
   }
-}
 
-  // 2. INTERACTIVIDAD: BOTTOM SHEET CON FOTO BASE64
   void _mostrarDetalleViaje(BuildContext context, dynamic viaje) {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(16.0),
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+          ),
+          padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                "Viaje #${viaje['id']} - ${viaje['tipo_incidente']}",
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+              Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10))),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: const CircleAvatar(backgroundColor: Colors.blue, child: Icon(Icons.person, color: Colors.white)),
+                title: Text("${viaje['origen']} ➔ ${viaje['destino']}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                subtitle: Text("Sale a las: ${viaje['hora']}"),
               ),
-              const SizedBox(height: 10),
-              Text("Descripción: ${viaje['descripcion']}"),
-              Text("Fecha: ${viaje['fecha_hora']}"),
-              const SizedBox(height: 15),
-              const Text(
-                "Evidencia fotográfica:",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 10),
-              // Aquí decodificamos el Base64 que viene de la API para mostrar la imagen
-              Center(
-                child:
-                    viaje['foto_base64'] != null &&
-                        viaje['foto_base64'].isNotEmpty
-                    ? Image.memory(
-                        base64Decode(viaje['foto_base64']),
-                        height: 150,
-                        fit: BoxFit.cover,
-                        errorBuilder: (ctx, err, stack) =>
-                            const Icon(Icons.broken_image, size: 50),
-                      )
-                    : const Icon(Icons.image_not_supported, size: 50),
+              const Divider(),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _datoExtra(Icons.attach_money, "Cuota", "\$${viaje['cuota']}"),
+                  _datoExtra(Icons.people, "Lugares", "${viaje['capacidad']}"),
+                  _datoExtra(Icons.timer, "Duración", "${viaje['duracion']}"),
+                ],
               ),
               const SizedBox(height: 20),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue.shade800,
+                  minimumSize: const Size(double.infinity, 50),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                ),
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Contactar Conductor", style: TextStyle(color: Colors.white)),
+              )
             ],
           ),
         );
@@ -88,134 +94,77 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
     );
   }
 
+  Widget _datoExtra(IconData icon, String label, String value) {
+    return Column(
+      children: [
+        Icon(icon, color: Colors.grey),
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text(
-          "Mapa de Raites",
-          style: TextStyle(color: Colors.white),
-        ),
-        backgroundColor: Colors.blue,
-        leading: IconButton(
-          icon: const Icon(Icons.home, color: Colors.white),
-          onPressed: () {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const HomePage()),
-            );
-          },
-        ),
+        title: const Text("Explorar Raites", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white.withOpacity(0.9),
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black),
       ),
-      body: Column(
-        children: [
-          // 3. FILTROS RÁPIDOS
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 8.0),
-            color: Colors.grey[200],
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                FilterChip(
-                  label: const Text("Todos"),
-                  selected: filtroActual == "Todos",
-                  onSelected: (val) => setState(() => filtroActual = "Todos"),
-                ),
-                FilterChip(
-                  label: const Text("Solo Raites"),
-                  selected: filtroActual == "Publicación de Raite",
-                  onSelected: (val) =>
-                      setState(() => filtroActual = "Publicación de Raite"),
-                ),
-              ],
-            ),
-          ),
+      body: FutureBuilder<List<dynamic>>(
+        future: obtenerViajes(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-          // USO DE FUTUREBUILDER (Regla de Oro del Sprint)
-          Expanded(
-            child: FutureBuilder<List<dynamic>>(
-              future: obtenerViajes(),
-              builder: (context, snapshot) {
-                // Si está cargando, mostramos el indicador
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        CircularProgressIndicator(),
-                        SizedBox(height: 10),
-                        Text("Cargando Mapa y Viajes..."),
-                      ],
-                    ),
-                  );
-                }
+          // Generar marcadores
+          List<Marker> marcadores = (snapshot.data ?? []).map((viaje) {
+            // Coordenadas por defecto (Colima) si no hay reales
+            double lat = viaje['latitud'] ?? 19.2620 + (0.005 * (viaje['id'] % 10)); 
+            double lng = viaje['longitud'] ?? -103.7229 + (0.005 * (viaje['id'] % 5));
 
-                // Si hay error
-                if (snapshot.hasError) {
-                  return Center(child: Text("Error: ${snapshot.error}"));
-                }
-
-                // Si no hay datos
-                if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return const Center(
-                    child: Text("No hay viajes publicados aún."),
-                  );
-                }
-
-                // Aplicar el filtro a la lista de datos
-                List<dynamic> viajesFiltrados = snapshot.data!;
-                if (filtroActual != "Todos") {
-                  viajesFiltrados = viajesFiltrados
-                      .where((v) => v['tipo_incidente'] == filtroActual)
-                      .toList();
-                }
-
-                // ========================================================
-                // FRAGMENTO DE CÓDIGO PARA EL ENTREGABLE (El .map)
-                // ========================================================
-                List<Marker> marcadores = viajesFiltrados.map((viaje) {
-                  // Validar que las coordenadas sean números válidos
-                  double lat =
-                      double.tryParse(viaje['latitud'].toString()) ?? 19.2433;
-                  double lng =
-                      double.tryParse(viaje['longitud'].toString()) ??
-                      -103.7256;
-
-                  return Marker(
-                    point: LatLng(lat, lng),
-                    width: 60,
-                    height: 60,
-                    child: GestureDetector(
-                      onTap: () => _mostrarDetalleViaje(context, viaje),
-                      child: const Icon(
-                        Icons.directions_car,
-                        color: Colors.blue,
-                        size: 40,
-                      ),
-                    ),
-                  );
-                }).toList();
-                // ========================================================
-
-                return FlutterMap(
-                  options: MapOptions(
-                    // Centro inicial en Colima
-                    initialCenter: const LatLng(19.2620, -103.7229),
-                    initialZoom: 13.0,
+            return Marker(
+              point: LatLng(lat, lng),
+              width: 50,
+              height: 50,
+              child: GestureDetector(
+                onTap: () => _mostrarDetalleViaje(context, viaje),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade800,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                    boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 5)],
                   ),
-                  children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.example.routemate',
-                    ),
-                    MarkerLayer(markers: marcadores),
-                  ],
-                );
-              },
+                  child: const Icon(Icons.directions_car_filled, color: Colors.white, size: 25),
+                ),
+              ),
+            );
+          }).toList();
+
+          return FlutterMap(
+            options: const MapOptions(
+              initialCenter: LatLng(19.2620, -103.7229),
+              initialZoom: 14.0,
             ),
-          ),
-        ],
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.example.routemate',
+              ),
+              MarkerLayer(markers: marcadores),
+            ],
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: Colors.white,
+        onPressed: () => setState(() {}), // Refrescar mapa
+        child: const Icon(Icons.refresh, color: Colors.blue),
       ),
     );
   }

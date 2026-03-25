@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../api_service.dart'; // Asegúrate de que la ruta sea correcta
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -8,13 +9,16 @@ class AdminDashboard extends StatefulWidget {
 }
 
 class _AdminDashboardState extends State<AdminDashboard> {
+  // 1. Instanciamos el servicio
+  final ApiService _apiService = ApiService();
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       body: Row(
         children: [
-          // 1. SIDEBAR (Menú lateral fijo)
+          // SIDEBAR (Se mantiene igual)
           Container(
             width: 250,
             color: Colors.blue.shade900,
@@ -36,7 +40,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ),
           ),
 
-          // 2. CONTENIDO PRINCIPAL
+          // CONTENIDO PRINCIPAL
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(30),
@@ -47,7 +51,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 20),
 
-                  // FILA DE TARJETAS DE MÉTRICAS
+                  // MÉTRICAS (Podemos hacer que estos números también sean reales luego)
                   Row(
                     children: [
                       _buildStatCard("Conductores", "24", Colors.blue),
@@ -58,32 +62,65 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
                   const SizedBox(height: 30),
 
-                  // TABLA DE USUARIOS REGISTRADOS
+                  // TABLA DE USUARIOS REALES
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(15),
-                      boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
+                      boxShadow: [const BoxShadow(color: Colors.black12, blurRadius: 10)],
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text("Usuarios Pendientes de Aprobación", 
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text("Usuarios en Base de Datos", 
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                            IconButton(
+                              icon: const Icon(Icons.refresh), 
+                              onPressed: () => setState(() {}) // Botón para recargar
+                            )
+                          ],
+                        ),
                         const Divider(),
-                        DataTable(
-                          columns: const [
-                            DataColumn(label: Text("Nombre")),
-                            DataColumn(label: Text("Correo")),
-                            DataColumn(label: Text("Rol")),
-                            DataColumn(label: Text("Estado")),
-                            DataColumn(label: Text("Acciones")),
-                          ],
-                          rows: [
-                            _buildDataRow("Juan Pérez", "juan@mail.com", "Conductor", "Pendiente"),
-                            _buildDataRow("Maria Sol", "maria@mail.com", "Pasajero", "Activo"),
-                          ],
+
+                        // 2. USAMOS FUTUREBUILDER PARA TRAER LOS DATOS
+                        FutureBuilder<List<dynamic>>(
+                          future: _apiService.obtenerUsuarios(),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState == ConnectionState.waiting) {
+                              return const Center(child: CircularProgressIndicator());
+                            } else if (snapshot.hasError) {
+                              return Text("Error: ${snapshot.error}");
+                            } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                              return const Padding(
+                                padding: EdgeInsets.all(20),
+                                child: Text("No hay usuarios registrados aún."),
+                              );
+                            }
+
+                            // Si hay datos, dibujamos la tabla
+                            final usuarios = snapshot.data!;
+                            return DataTable(
+                              columns: const [
+                                DataColumn(label: Text("Nombre")),
+                                DataColumn(label: Text("Correo")),
+                                DataColumn(label: Text("Rol")),
+                                DataColumn(label: Text("Estado")),
+                                DataColumn(label: Text("Acciones")),
+                              ],
+                              rows: usuarios.map((user) {
+                                return _buildDataRow(
+                                  user['nombre'] ?? 'Sin nombre',
+                                  user['email'] ?? 'Sin correo',
+                                  user['rol'] ?? 'Usuario',
+                                  user['estado'] ?? 'Pendiente',
+                                );
+                              }).toList(),
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -97,7 +134,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  // WIDGETS AUXILIARES PARA LIMPIEZA DE CÓDIGO
+  // --- TUS WIDGETS AUXILIARES (Se mantienen igual) ---
   Widget _buildMenuItem(IconData icon, String title, bool isSelected) {
     return ListTile(
       leading: Icon(icon, color: Colors.white70),

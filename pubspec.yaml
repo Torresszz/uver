@@ -12,7 +12,7 @@ dependencies:
     sdk: flutter
 
   # --- COMUNICACIÓN Y DATOS ---
-  http: ^1.1.0        # Bajé ligeramente la versión para mejor compatibilidad con SDK 3.10
+  http: ^1.6.0        # Bajé ligeramente la versión para mejor compatibilidad con SDK 3.10
   geolocator: ^10.1.0 # Versión estable para tu rango de SDK
   intl: ^0.18.1       # Útil para formatear fechas y dinero en el Dashboard
 

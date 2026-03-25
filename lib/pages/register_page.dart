@@ -13,57 +13,67 @@ class RegisterPage extends StatefulWidget {
 class _RegisterPageState extends State<RegisterPage> {
   String tipoUsuario = "conductor";
 
-  // 1. CONTROLADORES (Para capturar los datos que verá el Dashboard)
   final TextEditingController _nombreController = TextEditingController();
   final TextEditingController _correoController = TextEditingController();
   final TextEditingController _telefonoController = TextEditingController();
 
-  // 2. FUNCIÓN DE ENVÍO A LA API
+  // 1. URL CORREGIDA: Debe ser la de tu proyecto en Vercel
+  final String _apiUrl = 'https://uver-oxnw.vercel.app/api/usuarios';
+
   Future<void> registrarUsuario() async {
-    // URL orientada a Vercel/API local
-    final url = Uri.parse('/api/users'); 
+    // Verificamos que los campos no estén vacíos antes de enviar
+    if (_nombreController.text.isEmpty || _correoController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Por favor llena los campos principales")),
+      );
+      return;
+    }
 
     final Map<String, dynamic> userData = {
       'nombre': _nombreController.text,
-      'correo': _correoController.text,
+      'email': _correoController.text, // Cambié 'correo' a 'email' para que coincida con el Dashboard
       'telefono': _telefonoController.text,
-      'rol': tipoUsuario, // "conductor" o "pasajero"
+      'rol': tipoUsuario,
       'fecha_registro': DateTime.now().toIso8601String(),
-      'estado': 'pendiente', // Útil para que el admin lo apruebe en la web
+      'estado': 'Pendiente', // 'P' mayúscula para que se vea bien en la tabla
     };
 
     try {
       final response = await http.post(
-        url,
+        Uri.parse(_apiUrl), // Usamos la URL completa
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(userData),
       );
 
-      if (response.statusCode == 201 || response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 201) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Registro exitoso"), backgroundColor: Colors.green),
+          const SnackBar(content: Text("¡Registro exitoso! Enviado a revisión"), backgroundColor: Colors.green),
         );
+        // Limpiar campos después del éxito
+        _nombreController.clear();
+        _correoController.clear();
+        _telefonoController.clear();
       } else {
-        throw Exception('Error en el servidor');
+        throw Exception('Error del servidor: ${response.statusCode}');
       }
     } catch (e) {
-      // Fallback por si no tienes el backend listo aún: imprimimos el JSON
-      debugPrint("==== JSON PARA EL DASHBOARD WEB ====");
-      debugPrint(jsonEncode(userData));
+      debugPrint("==== ERROR EN REGISTRO ====");
+      debugPrint(e.toString());
       
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e (JSON impreso en consola)")),
+        SnackBar(content: Text("Error: No se pudo conectar con el servidor")),
       );
     }
   }
 
-  // 3. INPUT MODIFICADO (Ahora recibe un controller)
+  // --- El resto de tus widgets (buildInput, buildUpload, etc.) se mantienen igual ---
+  
   Widget buildInput(String label, IconData icon, TextEditingController controller,
       {TextInputType type = TextInputType.text}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: TextField(
-        controller: controller, // <-- Conexión clave
+        controller: controller,
         keyboardType: type,
         decoration: InputDecoration(
           labelText: label,
@@ -109,7 +119,11 @@ class _RegisterPageState extends State<RegisterPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Registro"), backgroundColor: Colors.blue),
+      appBar: AppBar(
+        title: const Text("Registro", style: TextStyle(color: Colors.white)), 
+        backgroundColor: Colors.blue.shade800,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
       drawer: const AppDrawer(),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -119,16 +133,16 @@ class _RegisterPageState extends State<RegisterPage> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 ChoiceChip(
-                  avatar: const Icon(Icons.directions_car, color: Colors.white),
-                  label: const Text("Tengo carro"),
+                  avatar: Icon(Icons.directions_car, color: tipoUsuario == "conductor" ? Colors.white : Colors.blue),
+                  label: Text("Tengo carro", style: TextStyle(color: tipoUsuario == "conductor" ? Colors.white : Colors.black)),
                   selected: tipoUsuario == "conductor",
                   selectedColor: Colors.blue,
                   onSelected: (val) => setState(() => tipoUsuario = "conductor"),
                 ),
                 const SizedBox(width: 10),
                 ChoiceChip(
-                  avatar: const Icon(Icons.person, color: Colors.white),
-                  label: const Text("Busco raite"),
+                  avatar: Icon(Icons.person, color: tipoUsuario == "pasajero" ? Colors.white : Colors.blue),
+                  label: Text("Busco raite", style: TextStyle(color: tipoUsuario == "pasajero" ? Colors.white : Colors.black)),
                   selected: tipoUsuario == "pasajero",
                   selectedColor: Colors.blue,
                   onSelected: (val) => setState(() => tipoUsuario = "pasajero"),
@@ -136,18 +150,22 @@ class _RegisterPageState extends State<RegisterPage> {
               ],
             ),
             const SizedBox(height: 20),
-            formularioComun(), // Campos que ambos comparten
+            formularioComun(),
             if (tipoUsuario == "conductor") ...[
               buildUpload("Foto placas del carro", Icons.directions_car),
               buildUpload("Foto licencia", Icons.credit_card),
               buildUpload("Foto calcomanías fiscales", Icons.verified),
             ],
             const SizedBox(height: 20),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-              onPressed: registrarUsuario, // <-- Conectado a la API
-              icon: const Icon(Icons.app_registration, color: Colors.white),
-              label: const Text("Registrarse", style: TextStyle(color: Colors.white)),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade800),
+                onPressed: registrarUsuario,
+                icon: const Icon(Icons.app_registration, color: Colors.white),
+                label: const Text("Registrarse", style: TextStyle(color: Colors.white, fontSize: 18)),
+              ),
             )
           ],
         ),

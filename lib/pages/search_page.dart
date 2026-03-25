@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../widgets/app_drawer.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -12,30 +14,14 @@ class _SearchPageState extends State<SearchPage>
     with SingleTickerProviderStateMixin {
   String modo = "publicados";
   
-  // 1. CONTROLADORES PARA FILTRAR BÚSQUEDA
   final _origenBusqueda = TextEditingController();
   final _destinoBusqueda = TextEditingController();
 
   late AnimationController _controller;
   late Animation<double> _fade;
 
-  // 2. LISTA DINÁMICA DE EJEMPLO (Lo que vendría de Vercel/API)
-  List<Map<String, dynamic>> viajesData = [
-    {
-      "origen": "Colima Centro",
-      "destino": "Villa de Álvarez",
-      "hora": "08:30 AM",
-      "cupo": "3",
-      "precio": "25"
-    },
-    {
-      "origen": "Facultad de Telemática",
-      "destino": "Coquimatlán",
-      "hora": "02:00 PM",
-      "cupo": "2",
-      "precio": "40"
-    },
-  ];
+  // URL de tu API de viajes en Vercel
+  final String _apiUrl = 'https://uver-oxnw.vercel.app/api/viajes';
 
   @override
   void initState() {
@@ -46,6 +32,21 @@ class _SearchPageState extends State<SearchPage>
     _controller.forward();
   }
 
+  // FUNCIÓN PARA OBTENER VIAJES DESDE VERCEL
+  Future<List<dynamic>> obtenerViajes() async {
+    try {
+      final response = await http.get(Uri.parse(_apiUrl));
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else {
+        return [];
+      }
+    } catch (e) {
+      debugPrint("Error cargando viajes: $e");
+      return [];
+    }
+  }
+
   @override
   void dispose() {
     _origenBusqueda.dispose();
@@ -54,7 +55,6 @@ class _SearchPageState extends State<SearchPage>
     super.dispose();
   }
 
-  // 3. INPUT ACTUALIZADO PARA RECIBIR CONTROLADOR
   Widget buildInput(String label, IconData icon, TextEditingController controller,
       {TextInputType type = TextInputType.text}) {
     return Padding(
@@ -81,15 +81,15 @@ class _SearchPageState extends State<SearchPage>
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              _infoRow(Icons.location_on, "Salida:", viaje["origen"], Colors.blue),
-              _infoRow(Icons.flag, "Destino:", viaje["destino"], Colors.red),
+              _infoRow(Icons.location_on, "Salida:", viaje["origen"] ?? "No especificado", Colors.blue),
+              _infoRow(Icons.flag, "Destino:", viaje["destino"] ?? "No especificado", Colors.red),
               const Divider(),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _miniInfo(Icons.access_time, viaje["hora"]),
-                  _miniInfo(Icons.people, "Cupo: ${viaje["cupo"]}"),
-                  _miniInfo(Icons.attach_money, "Cuota: \$${viaje["precio"]}"),
+                  _miniInfo(Icons.access_time, viaje["hora"] ?? "--:--"),
+                  _miniInfo(Icons.people, "Cupo: ${viaje["capacidad"] ?? '?' }"),
+                  _miniInfo(Icons.attach_money, "Cuota: \$${viaje["cuota"] ?? '0'}"),
                 ],
               ),
             ],
@@ -121,9 +121,24 @@ class _SearchPageState extends State<SearchPage>
     );
   }
 
+  // LISTA DINÁMICA CON FUTUREBUILDER
   Widget listaViajes() {
-    return Column(
-      children: viajesData.map((v) => viajeCard(v)).toList(),
+    return FutureBuilder<List<dynamic>>(
+      future: obtenerViajes(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.all(20),
+            child: Text("No hay viajes disponibles en este momento."),
+          );
+        }
+
+        return Column(
+          children: snapshot.data!.map((v) => viajeCard(v)).toList(),
+        );
+      },
     );
   }
 
@@ -135,17 +150,17 @@ class _SearchPageState extends State<SearchPage>
         const SizedBox(height: 20),
         ElevatedButton.icon(
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue,
+            backgroundColor: Colors.blue.shade800,
             minimumSize: const Size(double.infinity, 50),
           ),
           onPressed: () {
-            // Aquí filtrarías la lista 'viajesData' según los controllers
+            // Aquí podrías filtrar, por ahora solo refrescamos la lista
             setState(() {
-               modo = "publicados"; // Al buscar, regresamos a la lista
+               modo = "publicados"; 
             });
           },
           icon: const Icon(Icons.search, color: Colors.white),
-          label: const Text("Buscar Raite", style: TextStyle(color: Colors.white)),
+          label: const Text("Buscar Raite", style: TextStyle(color: Colors.white, fontSize: 16)),
         )
       ],
     );
@@ -155,8 +170,9 @@ class _SearchPageState extends State<SearchPage>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Buscar viaje"),
-        backgroundColor: Colors.blue,
+        title: const Text("Buscar viaje", style: TextStyle(color: Colors.white)),
+        backgroundColor: Colors.blue.shade800,
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       drawer: const AppDrawer(),
       body: FadeTransition(
@@ -174,14 +190,14 @@ class _SearchPageState extends State<SearchPage>
                 },
                 borderRadius: BorderRadius.circular(12),
                 selectedColor: Colors.white,
-                fillColor: Colors.blue,
+                fillColor: Colors.blue.shade800,
                 constraints: BoxConstraints(
-                  minWidth: (MediaQuery.of(context).size.width - 36) / 2,
-                  minHeight: 40,
+                  minWidth: (MediaQuery.of(context).size.width - 40) / 2,
+                  minHeight: 45,
                 ),
                 children: const [
-                  Text("Disponibles"),
-                  Text("Nueva Búsqueda"),
+                  Text("Disponibles", style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text("Nueva Búsqueda", style: TextStyle(fontWeight: FontWeight.bold)),
                 ],
               ),
               const SizedBox(height: 20),

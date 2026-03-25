@@ -6,6 +6,7 @@ class UserModel {
   final String correo;
   final UserRole rol;
   final String? vehiculo;
+  final String estado; // "Pendiente", "Aprobado", "Rechazado"
 
   UserModel({
     required this.id,
@@ -13,29 +14,39 @@ class UserModel {
     required this.correo,
     required this.rol,
     this.vehiculo,
+    this.estado = "Pendiente", // Por defecto al registrarse
   });
 
-  // Convertir de JSON (Base de datos) a Objeto Dart
+  // Convertir de JSON (Vercel KV) a Objeto Dart
   factory UserModel.fromMap(Map<String, dynamic> data) {
     return UserModel(
-      id: data['id'] ?? '',
-      nombre: data['nombre'] ?? '',
-      correo: data['correo'] ?? '',
-      rol: data['rol'] == 'conductor' 
-          ? UserRole.conductor 
-          : (data['rol'] == 'admin' ? UserRole.admin : UserRole.peaton),
+      id: data['id']?.toString() ?? '',
+      nombre: data['nombre'] ?? 'Sin nombre',
+      // IMPORTANTE: En el dashboard usamos 'email', asegúrate de que sea consistente
+      correo: data['email'] ?? data['correo'] ?? '', 
+      rol: _parseRole(data['rol']),
       vehiculo: data['vehiculo'],
+      estado: data['estado'] ?? 'Pendiente',
     );
   }
 
-  // VITAL PARA EL DASHBOARD: Convertir de Objeto Dart a JSON para enviar a la web
+  // Lógica de apoyo para el Rol
+  static UserRole _parseRole(String? rolStr) {
+    if (rolStr == 'conductor') return UserRole.conductor;
+    if (rolStr == 'admin') return UserRole.admin;
+    return UserRole.peaton;
+  }
+
+  // Para enviar a Vercel/API
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'nombre': nombre,
-      'correo': correo,
-      'rol': rol.name, // Guarda "conductor", "peaton" o "admin" como String
+      'email': correo, // Usamos 'email' para que el Dashboard lo lea bien
+      'rol': rol.name, 
       'vehiculo': vehiculo,
+      'estado': estado,
+      'fecha_registro': DateTime.now().toIso8601String(),
     };
   }
 }
