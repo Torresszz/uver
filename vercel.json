@@ -2,7 +2,7 @@
   "version": 2,
   "public": true,
   "framework": null,
-  "installCommand": "bash install-flutter.sh",
+  "installCommand": "bash install-flutter.sh && npm install",
   "buildCommand": "flutter/bin/flutter build web --release",
   "outputDirectory": "build/web",
   "rewrites": [
