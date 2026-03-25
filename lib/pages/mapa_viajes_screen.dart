@@ -17,7 +17,7 @@ class MapaViajesScreen extends StatefulWidget {
 
 class _MapaViajesScreenState extends State<MapaViajesScreen> {
   final String _apiUrl = 'https://uver-oxnw.vercel.app/api/viajes';
-  
+
   // Instancia del servicio para realizar la reserva
   final ApiService _apiService = ApiService();
 
@@ -36,7 +36,7 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
             );
             return fechaViaje.isAfter(ahora.subtract(const Duration(hours: 2)));
           } catch (e) {
-            return true; 
+            return true;
           }
         }).toList();
       } else {
@@ -64,7 +64,8 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 50, height: 5,
+                width: 50,
+                height: 5,
                 decoration: BoxDecoration(
                   color: Colors.grey[300],
                   borderRadius: BorderRadius.circular(10),
@@ -78,7 +79,10 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
                 ),
                 title: Text(
                   "${viaje['origen']} ➔ ${viaje['destino']}",
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
                 ),
                 subtitle: Text("Sale a las: ${viaje['hora']}"),
               ),
@@ -86,83 +90,116 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _datoExtra(Icons.attach_money, "Cuota", "\$${viaje['cuota']}"),
+                  _datoExtra(
+                    Icons.attach_money,
+                    "Cuota",
+                    "\$${viaje['cuota']}",
+                  ),
                   _datoExtra(Icons.people, "Lugares", "${viaje['capacidad']}"),
                   _datoExtra(Icons.timer, "Duración", "${viaje['duracion']}"),
                 ],
               ),
               const SizedBox(height: 25),
-              
+
               // BOTÓN DE RESERVA (REEMPLAZA AL DE CORREO)
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue.shade800,
                   foregroundColor: Colors.white,
                   minimumSize: const Size(double.infinity, 55),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
                 ),
                 icon: const Icon(Icons.event_seat),
-                label: const Text("Reservar Asiento", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                label: const Text(
+                  "Reservar Asiento",
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
                 onPressed: () async {
-  final String viajeId = viaje['id'].toString();
-  final String destino = viaje['destino'] ?? "tu destino";
+                  final String viajeId = viaje['id'].toString();
+                  final String destino = viaje['destino'] ?? "tu destino";
 
-  // 1. Obtener datos del pasajero de SharedPreferences
-  final prefs = await SharedPreferences.getInstance();
-  final String? emailPasajero = prefs.getString('email');
-  final String? nombrePasajero = prefs.getString('nombre'); // <-- Necesitamos este también
+                  // 1. Obtener datos usando los nombres que definiste en el Login
+                  final prefs = await SharedPreferences.getInstance();
 
-  if (emailPasajero == null || nombrePasajero == null) {
-    Navigator.pop(context); 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Error: No se encontró sesión activa. Inicia sesión de nuevo.")),
-    );
-    return;
-  }
+                  // AQUÍ ESTÁ EL CAMBIO: Usamos 'userEmail' y 'userName'
+                  final String? emailPasajero = prefs.getString('userEmail');
+                  final String? nombrePasajero = prefs.getString('userName');
 
-  // 2. Diálogo de confirmación
-  bool confirmar = await showDialog(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text("Confirmar Reserva"),
-      content: Text("¿$nombrePasajero, quieres apartar tu lugar a $destino?"),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancelar")),
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, true), 
-          child: const Text("Confirmar", style: TextStyle(fontWeight: FontWeight.bold))
-        ),
-      ],
-    ),
-  ) ?? false;
+                  if (emailPasajero == null || nombrePasajero == null) {
+                    // Si falla, mostramos qué falta para debuguear
+                    print(
+                      "DEBUG: Email: $emailPasajero, Nombre: $nombrePasajero",
+                    );
 
-  if (confirmar) {
-    try {
-      // 3. Llamada corregida con los 3 parámetros NOMBRADOS
-      final exito = await _apiService.reservarViaje(
-        viajeId: viajeId,
-        pasajeroEmail: emailPasajero,
-        pasajeroNombre: nombrePasajero, // <-- Ahora sí pasamos el nombre
-      );
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Error: No se encontró sesión activa."),
+                      ),
+                    );
+                    return;
+                  }
 
-      if (exito) {
-        Navigator.pop(context); // Cierra el detalle del viaje
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("¡Lugar apartado con éxito!"),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else {
-        throw Exception("Error en el servidor");
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("No se pudo completar la reserva"), backgroundColor: Colors.red),
-      );
-    }
-  }
-},
+                  // ... resto del código del diálogo y la llamada a _apiService
+
+                  // 2. Diálogo de confirmación
+                  bool confirmar =
+                      await showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text("Confirmar Reserva"),
+                          content: Text(
+                            "¿$nombrePasajero, quieres apartar tu lugar a $destino?",
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text("Cancelar"),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text(
+                                "Confirmar",
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ) ??
+                      false;
+
+                  if (confirmar) {
+                    try {
+                      // 3. Llamada corregida con los 3 parámetros NOMBRADOS
+                      final exito = await _apiService.reservarViaje(
+                        viajeId: viajeId,
+                        pasajeroEmail: emailPasajero,
+                        pasajeroNombre:
+                            nombrePasajero, // <-- Ahora sí pasamos el nombre
+                      );
+
+                      if (exito) {
+                        Navigator.pop(context); // Cierra el detalle del viaje
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("¡Lugar apartado con éxito!"),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      } else {
+                        throw Exception("Error en el servidor");
+                      }
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("No se pudo completar la reserva"),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                },
               ),
               const SizedBox(height: 10),
             ],
@@ -187,7 +224,10 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text("Explorar Raites", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+        title: const Text(
+          "Explorar Raites",
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.white.withOpacity(0.9),
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
@@ -206,7 +246,8 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
 
             return Marker(
               point: LatLng(lat, lng),
-              width: 50, height: 50,
+              width: 50,
+              height: 50,
               child: GestureDetector(
                 onTap: () => _mostrarDetalleViaje(context, viaje),
                 child: Container(
@@ -214,9 +255,15 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
                     color: Colors.blue.shade800,
                     shape: BoxShape.circle,
                     border: Border.all(color: Colors.white, width: 2),
-                    boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 5)],
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black26, blurRadius: 5),
+                    ],
                   ),
-                  child: const Icon(Icons.directions_car_filled, color: Colors.white, size: 25),
+                  child: const Icon(
+                    Icons.directions_car_filled,
+                    color: Colors.white,
+                    size: 25,
+                  ),
                 ),
               ),
             );
