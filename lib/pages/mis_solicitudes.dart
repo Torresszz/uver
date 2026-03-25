@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../widgets/app_drawer.dart';
+import '../api_service.dart';
 
 class MisSolicitudes extends StatefulWidget {
   const MisSolicitudes({super.key});
@@ -12,6 +13,7 @@ class MisSolicitudes extends StatefulWidget {
 }
 
 class _MisSolicitudesState extends State<MisSolicitudes> {
+  final ApiService _apiService = ApiService();
   List<dynamic> _misRaites = [];
   bool _isLoading = true;
   String _miEmail = "";
@@ -27,27 +29,31 @@ class _MisSolicitudesState extends State<MisSolicitudes> {
     _miEmail = prefs.getString('userEmail') ?? "";
 
     try {
-      final response = await http.get(Uri.parse('https://uver-oxnw.vercel.app/api/viajes'));
+      final response = await http.get(
+        Uri.parse('https://uver-oxnw.vercel.app/api/viajes'),
+      );
       if (response.statusCode == 200) {
         List<dynamic> todosLosViajes = json.decode(response.body);
         List<dynamic> filtrados = [];
 
-        // Buscamos los viajes donde YO aparezco en la lista de pasajeros
         for (var viaje in todosLosViajes) {
           List pasajeros = viaje['pasajeros'] ?? [];
+
           var yoComoPasajero = pasajeros.firstWhere(
-            (p) => p['email'] == _miEmail,
+            (p) =>
+                p['email'].toString().toLowerCase() == _miEmail.toLowerCase(),
             orElse: () => null,
           );
 
           if (yoComoPasajero != null) {
-            // Guardamos el viaje junto con MI estado específico en ese viaje
             filtrados.add({
-              'destino': viaje['destino'],
-              'origen': viaje['origen'],
-              'hora': viaje['hora'],
-              'conductor': viaje['conductorNombre'] ?? 'Conductor',
-              'miEstado': yoComoPasajero['estado'], // 'pendiente' o 'confirmado'
+              'id': (viaje['id'] ?? viaje['_id']).toString(),
+              'destino': viaje['destino'] ?? 'Sin destino',
+              'origen': viaje['origen'] ?? 'Sin origen',
+              'hora': viaje['hora'] ?? '--:--',
+              'conductor':
+                  viaje['conductor'] ?? viaje['conductorNombre'] ?? 'Anon',
+              'miEstado': yoComoPasajero['estado'] ?? 'pendiente',
             });
           }
         }
@@ -58,8 +64,64 @@ class _MisSolicitudesState extends State<MisSolicitudes> {
         });
       }
     } catch (e) {
-      debugPrint("Error: $e");
-      setState(() => _isLoading = false);
+      debugPrint("Error cargando solicitudes: $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _intentarCancelar(String viajeId, bool esRechazado) async {
+    // Si ya está rechazado, no preguntamos "cancelar", sino "eliminar del historial"
+    String titulo = esRechazado
+        ? "¿Eliminar del historial?"
+        : "¿Cancelar solicitud?";
+    String mensaje = esRechazado
+        ? "Esta notificación desaparecerá de tu lista."
+        : "Ya no aparecerás en la lista del conductor para este viaje.";
+
+    bool? confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(titulo),
+        content: Text(mensaje),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text("VOLVER"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text("SÍ, ELIMINAR"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar == true) {
+      setState(() => _isLoading = true);
+      bool exito = await _apiService.cancelarSolicitud(viajeId, _miEmail);
+
+      if (exito) {
+        _cargarSolicitudes();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                esRechazado ? "Registro eliminado" : "Solicitud cancelada",
+              ),
+              backgroundColor: esRechazado ? Colors.black87 : Colors.redAccent,
+              behavior: SnackBarBehavior.floating, // Se ve más moderno
+            ),
+          );
+        }
+      } else {
+        setState(() => _isLoading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Error al procesar la acción")),
+          );
+        }
+      }
     }
   }
 
@@ -69,68 +131,107 @@ class _MisSolicitudesState extends State<MisSolicitudes> {
       appBar: AppBar(
         title: const Text("Mis Solicitudes de Raite"),
         backgroundColor: Colors.blue.shade800,
+        foregroundColor: Colors.white,
       ),
       drawer: const AppDrawer(),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _misRaites.isEmpty
-              ? _buildEmptyState()
-              : RefreshIndicator(
-                  onRefresh: _cargarSolicitudes,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _misRaites.length,
-                    itemBuilder: (context, index) {
-                      final raite = _misRaites[index];
-                      final bool esAceptado = raite['miEstado'] == 'confirmado';
+          ? _buildEmptyState()
+          : RefreshIndicator(
+              onRefresh: _cargarSolicitudes,
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: _misRaites.length,
+                itemBuilder: (context, index) {
+                  final raite = _misRaites[index];
+                  final String estado = raite['miEstado']
+                      .toString()
+                      .toLowerCase();
 
-                      return Card(
-                        elevation: 3,
-                        margin: const EdgeInsets.only(bottom: 15),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.all(15),
-                          leading: CircleAvatar(
-                            backgroundColor: esAceptado ? Colors.green : Colors.orange.shade100,
-                            child: Icon(
-                              esAceptado ? Icons.check : Icons.timer_outlined,
-                              color: esAceptado ? Colors.white : Colors.orange,
+                  // Lógica de colores e iconos por estado
+                  IconData iconoEstado;
+                  String textoEstado;
+                  final MaterialColor colorEstado;
+
+                  if (estado == 'confirmado') {
+                    colorEstado = Colors.green;
+                    iconoEstado = Icons.check_circle;
+                    textoEstado = "SOLICITUD ACEPTADA ✅";
+                  } else if (estado == 'rechazado') {
+                    colorEstado = Colors.red;
+                    iconoEstado = Icons.cancel;
+                    textoEstado = "SOLICITUD RECHAZADA ❌";
+                  } else {
+                    colorEstado = Colors.orange;
+                    iconoEstado = Icons.timer_outlined;
+                    textoEstado = "ESPERANDO CONFIRMACIÓN ⏳";
+                  }
+
+                  return Card(
+                    elevation: 3,
+                    margin: const EdgeInsets.only(bottom: 15),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.all(15),
+                      leading: CircleAvatar(
+                        backgroundColor: colorEstado.withOpacity(0.1),
+                        child: Icon(iconoEstado, color: colorEstado),
+                      ),
+                      title: Text(
+                        "Hacia: ${raite['destino']}",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 17,
+                        ),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 5),
+                          Text("Origen: ${raite['origen']}"),
+                          Text("Conductor: ${raite['conductor']}"),
+                          Text("Hora: ${raite['hora']}"),
+                          const SizedBox(height: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: colorEstado.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              textoEstado,
+                              style: TextStyle(
+                                color: colorEstado.shade800,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
+                              ),
                             ),
                           ),
-                          title: Text(
-                            "Destino: ${raite['destino']}",
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 5),
-                              Text("Origen: ${raite['origen']}"),
-                              Text("Conductor: ${raite['conductor']}"),
-                              Text("Hora: ${raite['hora']}"),
-                              const SizedBox(height: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: esAceptado ? Colors.green.shade50 : Colors.orange.shade50,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  esAceptado ? "SOLICITUD ACEPTADA ✅" : "ESPERANDO CONFIRMACIÓN ⏳",
-                                  style: TextStyle(
-                                    color: esAceptado ? Colors.green.shade700 : Colors.orange.shade800,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                        ],
+                      ),
+                      trailing: IconButton(
+                        icon: Icon(
+                          estado == 'rechazado'
+                              ? Icons.delete_forever
+                              : Icons.delete_sweep,
+                          color: Colors.redAccent,
                         ),
-                      );
-                    },
-                  ),
-                ),
+                        onPressed: () => _intentarCancelar(
+                          raite['id'],
+                          estado == 'rechazado',
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
     );
   }
 
@@ -139,9 +240,16 @@ class _MisSolicitudesState extends State<MisSolicitudes> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.directions_bus_outlined, size: 80, color: Colors.grey.shade400),
+          Icon(
+            Icons.directions_bus_outlined,
+            size: 80,
+            color: Colors.grey.shade400,
+          ),
           const SizedBox(height: 16),
-          const Text("No has solicitado ningún raite aún", style: TextStyle(color: Colors.grey, fontSize: 16)),
+          const Text(
+            "No tienes solicitudes activas",
+            style: TextStyle(color: Colors.grey, fontSize: 16),
+          ),
         ],
       ),
     );

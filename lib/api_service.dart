@@ -3,117 +3,114 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 
 class ApiService {
-  // URL base para usuarios
-  static const String baseUrl = 'https://uver-oxnw.vercel.app/api/usuarios';
+  // URLs base
+  static const String baseUrlUsuarios = 'https://uver-oxnw.vercel.app/api/usuarios';
+  static const String baseUrlViajes = 'https://uver-oxnw.vercel.app/api/viajes';
 
-  // 1. OBTENER TODOS LOS USUARIOS
+  // ---------------------------------------------------------
+  // SECCIÓN: USUARIOS (ADMINISTRACIÓN)
+  // ---------------------------------------------------------
+
   Future<List<dynamic>> obtenerUsuarios() async {
     try {
-      final response = await http.get(Uri.parse(baseUrl));
-
-      if (response.statusCode == 200) {
-        return json.decode(response.body);
-      } else {
-        return [];
-      }
+      final response = await http.get(Uri.parse(baseUrlUsuarios));
+      return response.statusCode == 200 ? json.decode(response.body) : [];
     } catch (e) {
-      print("Error de conexión (obtener): $e");
+      debugPrint("Error de conexión (obtenerUsuarios): $e");
       return [];
     }
   }
 
-  // 2. CAMBIAR ESTADO (Aceptado / Rechazado / Pendiente)
-  // Esta es la que usan los botones de Check y Close en tu Dashboard
   Future<bool> cambiarEstadoUsuario(String email, String nuevoEstado) async {
     try {
       final response = await http.put(
-        Uri.parse(baseUrl), // Usamos PUT para actualizar
+        Uri.parse(baseUrlUsuarios),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'email': email,
-          'estado': nuevoEstado,
-        }),
+        body: json.encode({'email': email, 'estado': nuevoEstado}),
       );
-
-      // Aceptamos 200 (OK) o 204 (No Content) según como responda tu backend
       return response.statusCode == 200 || response.statusCode == 204;
     } catch (e) {
-      print("Error al actualizar estado: $e");
+      debugPrint("Error al actualizar estado usuario: $e");
       return false;
     }
   }
 
-  // 3. ELIMINAR USUARIO
   Future<bool> eliminarUsuario(String email) async {
     try {
       final response = await http.delete(
-        Uri.parse(baseUrl),
+        Uri.parse(baseUrlUsuarios),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'email': email}),
       );
       return response.statusCode == 200;
     } catch (e) {
-      print("Error al eliminar: $e");
+      debugPrint("Error al eliminar usuario: $e");
       return false;
     }
   }
 
-  // 4. GUARDAR NUEVO USUARIO (Registro)
-  Future<bool> guardarUsuario(Map<String, dynamic> datos) async {
-    try {
-      final response = await http.post(
-        Uri.parse(baseUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(datos),
-      );
-      return response.statusCode == 200 || response.statusCode == 201;
-    } catch (e) {
-      print("Error al guardar: $e");
-      return false;
-    }
-  }
+  // ---------------------------------------------------------
+  // SECCIÓN: VIAJES Y RESERVAS
+  // ---------------------------------------------------------
 
- // 5. RESERVA DE VIAJE (PASAJERO -> ENVÍA SOLICITUD)
+  // 1. Reservar (Pasajero envía solicitud inicial)
   Future<bool> reservarViaje({
-    required String viajeId, 
-    required String pasajeroEmail, 
-    required String pasajeroNombre
+    required String viajeId,
+    required String pasajeroEmail,
+    required String pasajeroNombre,
   }) async {
     try {
       final response = await http.post(
-        // Cambiamos a la nueva ruta de reservar
-        Uri.parse('https://uver-oxnw.vercel.app/api/reservar'), 
+        Uri.parse('https://uver-oxnw.vercel.app/api/reservar'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'viajeId': viajeId,
           'pasajeroEmail': pasajeroEmail,
           'pasajeroNombre': pasajeroNombre,
+          'estado': 'pendiente',
         }),
       );
-      
       return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
-      debugPrint("Error en ApiService (reservarViaje): $e");
+      debugPrint("Error en reservarViaje: $e");
       return false;
     }
   }
 
-  // 6. DECIDIR SOLICITUD (CHOFER -> ACEPTA O RECHAZA)
+  // 2. Decidir (Conductor acepta o rechaza)
   Future<bool> decidirSolicitud(String viajeId, String pasajeroEmail, String accion) async {
     try {
       final response = await http.post(
-        // Apuntamos al nuevo archivo decidir.js
-        Uri.parse('https://uver-oxnw.vercel.app/api/decidir'), 
+        Uri.parse('$baseUrlViajes/decidir'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'viajeId': viajeId,
           'pasajeroEmail': pasajeroEmail,
-          'accion': accion, // "aceptar" o "rechazar"
+          'accion': accion, // 'aceptar' o 'rechazar'
         }),
       );
       return response.statusCode == 200;
     } catch (e) {
       debugPrint("Error en decidirSolicitud: $e");
+      return false;
+    }
+  }
+
+  // 3. Cancelar (Pasajero se arrepiente y se elimina de la lista)
+  Future<bool> cancelarSolicitud(String viajeId, String pasajeroEmail) async {
+    try {
+      final response = await http.delete(
+        Uri.parse('https://uver-oxnw.vercel.app/api/viajes/cancelar-reserva'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'viajeId': viajeId,
+          'pasajeroEmail': pasajeroEmail,
+        }),
+      );
+      // Retornamos true si el servidor confirma la eliminación
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint("Error en cancelarSolicitud: $e");
       return false;
     }
   }

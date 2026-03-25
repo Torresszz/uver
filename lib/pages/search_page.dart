@@ -30,7 +30,6 @@ class _SearchPageState extends State<SearchPage>
   List<dynamic> _viajesFiltrados = [];
   bool _estaCargando = true;
 
-  // Variables para almacenar los datos del usuario logueado
   String _emailReal = "";
   String _nombreReal = "";
 
@@ -44,11 +43,10 @@ class _SearchPageState extends State<SearchPage>
     _fade = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
     _controller.forward();
 
-    _cargarDatosUsuario(); // Carga de SharedPreferences
-    _cargarViajes(); // Carga de API
+    _cargarDatosUsuario();
+    _cargarViajes();
   }
 
-  // MODIFICADO: Unificado con las llaves del Login (userName y userEmail)
   Future<void> _cargarDatosUsuario() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
@@ -107,7 +105,6 @@ class _SearchPageState extends State<SearchPage>
     });
   }
 
-  // MODIFICADO: Validaciones de seguridad añadidas
   void _gestionarReserva(Map viaje) async {
     if (_emailReal.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -116,7 +113,19 @@ class _SearchPageState extends State<SearchPage>
       return;
     }
 
-    // Seguridad: El conductor no puede solicitar su propio viaje
+    // Validación de Capacidad antes de mostrar el diálogo
+    List pasajeros = viaje['pasajeros'] ?? [];
+    int ocupados = pasajeros.where((p) => p['estado'].toString().toLowerCase() == 'confirmado').length;
+    int capacidadMax = int.tryParse(viaje['capacidad'].toString()) ?? 0;
+
+    if (ocupados >= capacidadMax) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Lo sentimos, este viaje se acaba de llenar.")),
+      );
+      _cargarViajes(); // Recargar para actualizar la UI
+      return;
+    }
+
     if (viaje['conductorEmail'] == _emailReal) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("No puedes solicitar tu propio viaje.")),
@@ -124,20 +133,15 @@ class _SearchPageState extends State<SearchPage>
       return;
     }
 
-    // Seguridad: Verificar si ya solicitó
-    List pasajeros = viaje['pasajeros'] ?? [];
     bool yaSolicitado = pasajeros.any((p) => p['email'] == _emailReal);
     if (yaSolicitado) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Ya enviaste una solicitud para este viaje."),
-        ),
+        const SnackBar(content: Text("Ya enviaste una solicitud para este viaje.")),
       );
       return;
     }
 
-    bool confirmar =
-        await showDialog(
+    bool confirmar = await showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text("Confirmar Solicitud"),
@@ -151,7 +155,10 @@ class _SearchPageState extends State<SearchPage>
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, true),
-                child: const Text("Sí, enviar"),
+                child: const Text(
+                  "Sí, enviar",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
             ],
           ),
@@ -159,25 +166,54 @@ class _SearchPageState extends State<SearchPage>
         false;
 
     if (confirmar) {
-      // Manejo dinámico de ID (id o _id)
-      final viajeId = (viaje['id'] ?? viaje['_id']).toString();
-
-      bool exito = await _apiService.reservarViaje(
-        viajeId: viajeId,
-        pasajeroEmail: _emailReal,
-        pasajeroNombre: _nombreReal,
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+              ),
+              SizedBox(width: 15),
+              Text("Procesando solicitud..."),
+            ],
+          ),
+          duration: Duration(seconds: 1),
+        ),
       );
 
-      if (exito) {
-        // MUY IMPORTANTE: Recargar los viajes de la API para ver el nuevo estado
-        await _cargarViajes();
+      try {
+        final viajeId = (viaje['id'] ?? viaje['_id']).toString();
+        bool exito = await _apiService.reservarViaje(
+          viajeId: viajeId,
+          pasajeroEmail: _emailReal,
+          pasajeroNombre: _nombreReal,
+        );
 
+        if (exito) {
+          await _cargarViajes();
+          if (mounted) {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("¡Solicitud enviada! El conductor la revisará."),
+                backgroundColor: Colors.green,
+                behavior: SnackBarBehavior.floating,
+                duration: Duration(seconds: 4),
+              ),
+            );
+          }
+        } else {
+          throw Exception("La API rechazó la solicitud");
+        }
+      } catch (e) {
         if (mounted) {
-          setState(() {}); // Forzar a Flutter a repintar los botones
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("¡Solicitud enviada! El conductor la revisará."),
-              backgroundColor: Colors.green,
+            SnackBar(
+              content: Text("Error al reservar: ${e.toString()}"),
+              backgroundColor: Colors.red,
             ),
           );
         }
@@ -185,59 +221,85 @@ class _SearchPageState extends State<SearchPage>
     }
   }
 
-  // MODIFICADO: Lógica de estados en el botón
   Widget viajeCard(Map viaje) {
     List pasajerosActuales = viaje['pasajeros'] ?? [];
 
-    // Contamos cupos ocupados basándonos en los confirmados
+    // Cálculo real de cupos (Solo confirmados ocupan lugar)
     int ocupados = pasajerosActuales
-        .where((p) => p['estado'] == 'confirmado')
+        .where((p) => p['estado'].toString().toLowerCase() == 'confirmado')
         .length;
+
     int cupoTotal = int.tryParse(viaje['capacidad'].toString()) ?? 0;
     int disponibles = cupoTotal - ocupados;
+    if (disponibles < 0) disponibles = 0;
 
-    // Verificar si el usuario ya está en este viaje
     bool yaSolicitado = pasajerosActuales.any((p) => p['email'] == _emailReal);
     bool esMiPropioViaje = viaje['conductorEmail'] == _emailReal;
 
+    Color botonColor;
+    String botonTexto;
+    bool botonHabilitado;
+
+    if (esMiPropioViaje) {
+      botonColor = Colors.grey.shade400;
+      botonTexto = "TU VIAJE";
+      botonHabilitado = false;
+    } else if (yaSolicitado) {
+      botonColor = Colors.orange.shade800;
+      botonTexto = "SOLICITUD ENVIADA";
+      botonHabilitado = false;
+    } else if (disponibles <= 0) {
+      botonColor = Colors.grey.shade400;
+      botonTexto = "VIAJE LLENO";
+      botonHabilitado = false;
+    } else {
+      botonColor = Colors.blue.shade700;
+      botonTexto = "SOLICITAR LUGAR";
+      botonHabilitado = true;
+    }
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
       child: Card(
-        elevation: 3,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         child: Column(
           children: [
             InkWell(
               onTap: () => _navegarAlMapa(viaje),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    _infoRow(
-                      Icons.location_on,
-                      "Salida:",
-                      viaje["origen"] ?? "N/A",
-                      Colors.blue,
-                    ),
-                    _infoRow(
-                      Icons.flag,
-                      "Destino:",
-                      viaje["destino"] ?? "N/A",
-                      Colors.red,
-                    ),
-                    const Divider(),
+                    _infoRow(Icons.location_on, "Salida:", viaje["origen"] ?? "N/A", Colors.blue),
+                    const SizedBox(height: 8),
+                    _infoRow(Icons.flag, "Destino:", viaje["destino"] ?? "N/A", Colors.red),
+                    const Divider(height: 24),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         _miniInfo(Icons.access_time, viaje["hora"] ?? "--:--"),
-                        _miniInfo(
-                          Icons.people,
-                          "Libres: $disponibles de $cupoTotal",
+                        // Mini Info de Cupos con color dinámico
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.people,
+                              size: 16,
+                              color: disponibles == 0 ? Colors.red : (disponibles == 1 ? Colors.orange : Colors.green),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              "Libres: $disponibles",
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: disponibles == 0 ? Colors.red : (disponibles == 1 ? Colors.orange.shade900 : Colors.green.shade700),
+                              ),
+                            ),
+                          ],
                         ),
-                        _miniInfo(
-                          Icons.attach_money,
-                          "Cuota: \$${viaje["cuota"]}",
-                        ),
+                        _miniInfo(Icons.attach_money, "Cuota: \$${viaje["cuota"]}"),
                       ],
                     ),
                   ],
@@ -245,28 +307,23 @@ class _SearchPageState extends State<SearchPage>
               ),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
               child: SizedBox(
                 width: double.infinity,
+                height: 45,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: yaSolicitado || esMiPropioViaje
-                        ? Colors.orange
-                        : (disponibles > 0
-                              ? Colors.blue.shade700
-                              : Colors.grey),
+                    backgroundColor: botonColor,
                     foregroundColor: Colors.white,
+                    disabledBackgroundColor: botonColor.withOpacity(0.7),
+                    disabledForegroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    elevation: botonHabilitado ? 2 : 0,
                   ),
-                  onPressed:
-                      (disponibles > 0 && !yaSolicitado && !esMiPropioViaje)
-                      ? () => _gestionarReserva(viaje)
-                      : null,
+                  onPressed: botonHabilitado ? () => _gestionarReserva(viaje) : null,
                   child: Text(
-                    esMiPropioViaje
-                        ? "TU VIAJE"
-                        : yaSolicitado
-                        ? "SOLICITUD ENVIADA"
-                        : (disponibles > 0 ? "SOLICITAR LUGAR" : "VIAJE LLENO"),
+                    botonTexto,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                 ),
               ),
@@ -284,7 +341,7 @@ class _SearchPageState extends State<SearchPage>
         const SizedBox(width: 8),
         Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(width: 5),
-        Expanded(child: Text(value, overflow: TextOverflow.ellipsis)),
+        Expanded(child: Text(value, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15))),
       ],
     );
   }
@@ -292,18 +349,14 @@ class _SearchPageState extends State<SearchPage>
   Widget _miniInfo(IconData icon, String text) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: Colors.grey),
+        Icon(icon, size: 16, color: Colors.grey.shade600),
         const SizedBox(width: 4),
-        Text(text, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(text, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
       ],
     );
   }
 
-  Widget buildInput(
-    String label,
-    IconData icon,
-    TextEditingController controller,
-  ) {
+  Widget buildInput(String label, IconData icon, TextEditingController controller) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: TextField(
@@ -332,11 +385,10 @@ class _SearchPageState extends State<SearchPage>
     return Scaffold(
       backgroundColor: Colors.grey.shade100,
       appBar: AppBar(
-        title: const Text(
-          "Buscar raite",
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: const Text("Buscar raite", style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
+        backgroundColor: Colors.blue.shade800,
+        foregroundColor: Colors.white,
       ),
       drawer: const AppDrawer(),
       body: FadeTransition(
@@ -346,21 +398,23 @@ class _SearchPageState extends State<SearchPage>
             Container(
               color: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 10),
-              child: ToggleButtons(
-                isSelected: [modo == "publicados", modo == "buscar"],
-                onPressed: (index) {
-                  setState(() {
-                    modo = index == 0 ? "publicados" : "buscar";
-                  });
-                },
-                borderRadius: BorderRadius.circular(12),
-                selectedColor: Colors.white,
-                fillColor: Colors.blue.shade800,
-                constraints: BoxConstraints(
-                  minWidth: (MediaQuery.of(context).size.width - 40) / 2,
-                  minHeight: 45,
+              child: Center(
+                child: ToggleButtons(
+                  isSelected: [modo == "publicados", modo == "buscar"],
+                  onPressed: (index) {
+                    setState(() {
+                      modo = index == 0 ? "publicados" : "buscar";
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  selectedColor: Colors.white,
+                  fillColor: Colors.blue.shade800,
+                  constraints: BoxConstraints(
+                    minWidth: (MediaQuery.of(context).size.width - 60) / 2,
+                    minHeight: 40,
+                  ),
+                  children: const [Text("Disponibles"), Text("Filtrar Búsqueda")],
                 ),
-                children: const [Text("Disponibles"), Text("Filtrar Búsqueda")],
               ),
             ),
             Expanded(
@@ -368,44 +422,34 @@ class _SearchPageState extends State<SearchPage>
                 duration: const Duration(milliseconds: 300),
                 child: modo == "publicados"
                     ? _estaCargando
-                          ? const Center(child: CircularProgressIndicator())
-                          : _viajesFiltrados.isEmpty
-                          ? const Center(
-                              child: Text("No se encontraron viajes."),
-                            )
-                          : ListView(
-                              padding: const EdgeInsets.all(16),
-                              children: _viajesFiltrados
-                                  .map((v) => viajeCard(v))
-                                  .toList(),
-                            )
+                        ? const Center(child: CircularProgressIndicator())
+                        : RefreshIndicator(
+                            onRefresh: _cargarViajes,
+                            child: _viajesFiltrados.isEmpty
+                                ? const Center(child: Text("No se encontraron viajes."))
+                                : ListView.builder(
+                                    padding: const EdgeInsets.all(10),
+                                    itemCount: _viajesFiltrados.length,
+                                    itemBuilder: (context, index) => viajeCard(_viajesFiltrados[index]),
+                                  ),
+                          )
                     : SingleChildScrollView(
                         padding: const EdgeInsets.all(20),
                         child: Column(
                           children: [
-                            buildInput(
-                              "¿De dónde sales?",
-                              Icons.location_on,
-                              _origenBusqueda,
-                            ),
-                            buildInput(
-                              "¿A dónde vas?",
-                              Icons.flag,
-                              _destinoBusqueda,
-                            ),
+                            buildInput("¿De dónde sales?", Icons.location_on, _origenBusqueda),
+                            buildInput("¿A dónde vas?", Icons.flag, _destinoBusqueda),
                             const SizedBox(height: 20),
                             ElevatedButton.icon(
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.blue.shade800,
                                 foregroundColor: Colors.white,
                                 minimumSize: const Size(double.infinity, 55),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                               ),
                               onPressed: _aplicarFiltro,
                               icon: const Icon(Icons.search),
-                              label: const Text("BUSCAR AHORA"),
+                              label: const Text("BUSCAR AHORA", style: TextStyle(fontWeight: FontWeight.bold)),
                             ),
                           ],
                         ),

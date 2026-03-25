@@ -47,13 +47,20 @@ class _MisViajesConductorState extends State<MisViajesConductor> {
 
   // Envía la decisión a la API y refresca la vista
   void _procesarSolicitud(String viajeId, String pEmail, String accion) async {
+    // Mostrar un pequeño indicador de que estamos trabajando
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Procesando..."), duration: Duration(seconds: 1)),
+    );
+
     bool exito = await _apiService.decidirSolicitud(viajeId, pEmail, accion);
+    
     if (exito) {
-      _cargarDatosYViajes(); // Refrescar datos para ver el cambio de estado
+      await _cargarDatosYViajes(); // Refrescar datos para ver el cambio de estado
       if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Solicitud ${accion}ada correctamente"),
+            content: Text("Solicitud ${accion == 'aceptar' ? 'aceptada' : 'rechazada'} correctamente"),
             backgroundColor: accion == "aceptar" ? Colors.green : Colors.red,
           ),
         );
@@ -89,8 +96,11 @@ class _MisViajesConductorState extends State<MisViajesConductor> {
                 itemBuilder: (context, index) {
                   var viaje = _misViajes[index];
                   List pasajeros = viaje['pasajeros'] ?? [];
-                  // ID de Vercel KV suele ser 'id' o '_id'
                   String vId = (viaje['id'] ?? viaje['_id']).toString();
+
+                  // CÁLCULO DE CUPOS DINÁMICO
+                  int confirmados = pasajeros.where((p) => p['estado'] == 'confirmado').length;
+                  int capacidad = int.tryParse(viaje['capacidad'].toString()) ?? 0;
 
                   return Card(
                     elevation: 4,
@@ -102,7 +112,7 @@ class _MisViajesConductorState extends State<MisViajesConductor> {
                         "Hacia: ${viaje['destino']}",
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      subtitle: Text("Cupo: ${pasajeros.length} / ${viaje['capacidad']}"),
+                      subtitle: Text("Confirmados: $confirmados de $capacidad"),
                       children: [
                         if (pasajeros.isEmpty)
                           const Padding(
