@@ -1,37 +1,39 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // IMPORTANTE
-import '../pages/login_page.dart'; // IMPORTANTE para el Logout
+import 'package:shared_preferences/shared_preferences.dart';
+import '../pages/login_page.dart';
 import '../pages/home_page.dart';
 import '../pages/search_page.dart';
 import '../pages/publish_page.dart';
 import '../pages/register_page.dart';
 import '../pages/mapa_viajes_screen.dart';
+import '../pages/viajes_conductor.dart';
+import '../pages/mis_solicitudes.dart'; // <--- 1. NUEVO: Importa la página de solicitudes
 
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
 
-  // Función para obtener el nombre guardado en SharedPreferences
   Future<Map<String, String>> _getUserData() async {
     final prefs = await SharedPreferences.getInstance();
     return {
       'name': prefs.getString('userName') ?? 'Usuario',
       'email': prefs.getString('userEmail') ?? 'Tu comunidad de raites',
+      'role': prefs.getString('userRole') ?? 'peaton',
     };
   }
 
   @override
   Widget build(BuildContext context) {
     return Drawer(
-      child: Column(
-        children: [
-          // Header Dinámico con FutureBuilder
-          FutureBuilder<Map<String, String>>(
-            future: _getUserData(),
-            builder: (context, snapshot) {
-              final name = snapshot.data?['name'] ?? 'Cargando...';
-              final email = snapshot.data?['email'] ?? '...';
+      child: FutureBuilder<Map<String, String>>(
+        future: _getUserData(),
+        builder: (context, snapshot) {
+          final name = snapshot.data?['name'] ?? 'Cargando...';
+          final email = snapshot.data?['email'] ?? '...';
+          final role = snapshot.data?['role'] ?? 'peaton';
 
-              return UserAccountsDrawerHeader(
+          return Column(
+            children: [
+              UserAccountsDrawerHeader(
                 decoration: BoxDecoration(
                   color: Colors.blue.shade800,
                   image: const DecorationImage(
@@ -49,72 +51,90 @@ class AppDrawer extends StatelessWidget {
                   backgroundColor: Colors.white,
                   child: Icon(Icons.person, size: 40, color: Colors.blue),
                 ),
-              );
-            },
-          ),
+              ),
 
-          // Lista de navegación
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                _buildMenuItem(
-                  icon: Icons.home_rounded,
-                  title: 'Inicio',
-                  onTap: () => _navigate(context, const HomePage()),
-                ),
-                _buildMenuItem(
-                  icon: Icons.map_rounded,
-                  title: 'Explorar Mapa',
-                  iconColor: Colors.blue.shade700,
-                  onTap: () => _navigate(context, const MapaViajesScreen()),
-                ),
-                _buildMenuItem(
-                  icon: Icons.search_rounded,
-                  title: 'Buscar Viaje',
-                  onTap: () => _navigate(context, const SearchPage()),
-                ),
-                _buildMenuItem(
-                  icon: Icons.add_location_alt_rounded,
-                  title: 'Publicar Viaje',
-                  onTap: () => _navigate(context, const PublishPage()),
-                ),
-                const Divider(),
-                _buildMenuItem(
-                  icon: Icons.person_outline_rounded,
-                  title: 'Mi Perfil / Registro',
-                  onTap: () => _navigate(context, const RegisterPage()),
-                ),
-                
-                // BOTÓN DE CERRAR SESIÓN
-                ListTile(
-                  leading: const Icon(Icons.logout, color: Colors.red),
-                  title: const Text('Cerrar Sesión', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                  onTap: () async {
-                    final prefs = await SharedPreferences.getInstance();
-                    await prefs.clear(); // Borra la sesión
+              Expanded(
+                child: ListView(
+                  padding: EdgeInsets.zero,
+                  children: [
+                    _buildMenuItem(
+                      icon: Icons.home_rounded,
+                      title: 'Inicio',
+                      onTap: () => _navigate(context, const HomePage()),
+                    ),
+                    _buildMenuItem(
+                      icon: Icons.map_rounded,
+                      title: 'Explorar Mapa',
+                      iconColor: Colors.blue.shade700,
+                      onTap: () => _navigate(context, const MapaViajesScreen()),
+                    ),
+                    _buildMenuItem(
+                      icon: Icons.search_rounded,
+                      title: 'Buscar Viaje',
+                      onTap: () => _navigate(context, const SearchPage()),
+                    ),
+
+                    // 2. NUEVO: Botón para que CUALQUIER usuario vea sus solicitudes enviadas
+                    _buildMenuItem(
+                      icon: Icons.history_rounded,
+                      title: 'Mis Solicitudes (Pasajero)',
+                      iconColor: Colors.purple.shade700,
+                      onTap: () => _navigate(context, const MisSolicitudes()),
+                    ),
+
+                    if (role == "chofer" || role == "conductor") ...[
+                      const Divider(),
+                      _buildMenuItem(
+                        icon: Icons.add_location_alt_rounded,
+                        title: 'Publicar Viaje',
+                        iconColor: Colors.green.shade700,
+                        onTap: () => _navigate(context, const PublishPage()),
+                      ),
+                      _buildMenuItem(
+                        icon: Icons.assignment_ind_rounded,
+                        title: 'Gestionar mis Viajes',
+                        iconColor: Colors.orange.shade800,
+                        onTap: () => _navigate(context, const MisViajesConductor()),
+                      ),
+                    ],
+
+                    const Divider(),
+                    _buildMenuItem(
+                      icon: Icons.person_outline_rounded,
+                      title: 'Mi Perfil / Registro',
+                      onTap: () => _navigate(context, const RegisterPage()),
+                    ),
                     
-                    if (context.mounted) {
-                      Navigator.pushAndRemoveUntil(
-                        context,
-                        MaterialPageRoute(builder: (_) => const LoginPage()),
-                        (route) => false,
-                      );
-                    }
-                  },
+                    ListTile(
+                      leading: const Icon(Icons.logout, color: Colors.red),
+                      title: const Text('Cerrar Sesión', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                      onTap: () async {
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.clear();
+                        
+                        if (context.mounted) {
+                          Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(builder: (_) => const LoginPage()),
+                            (route) => false,
+                          );
+                        }
+                      },
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          
-          const Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Text(
-              'v1.0.2 Beta',
-              style: TextStyle(color: Colors.grey, fontSize: 12),
-            ),
-          ),
-        ],
+              ),
+              
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'v1.0.2 Beta',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

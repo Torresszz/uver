@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../pages/home_page.dart';
+import '../widgets/app_drawer.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:intl/intl.dart'; // Para manejar horas y fechas
 
 class MapaViajesScreen extends StatefulWidget {
-  const MapaViajesScreen({super.key});
+
+  final LatLng? centroInicial;
+  const MapaViajesScreen({super.key, this.centroInicial});
 
   @override
   State<MapaViajesScreen> createState() => _MapaViajesScreenState();
@@ -114,6 +117,7 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
       ),
+      drawer: const AppDrawer(),
       body: FutureBuilder<List<dynamic>>(
         future: obtenerViajes(),
         builder: (context, snapshot) {

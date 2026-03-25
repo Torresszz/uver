@@ -14,6 +14,7 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passController = TextEditingController();
   bool _isLoading = false;
 
   // URL de tu API de usuarios en Vercel
@@ -21,46 +22,65 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _intentarLogin() async {
     String email = _emailController.text.trim();
+    String password = _passController.text
+        .trim(); // <-- Obtenemos la contraseña
 
-    if (email.isEmpty) {
-      _showError("Por favor, ingresa tu correo universitario");
+    if (email.isEmpty || password.isEmpty) {
+      _showError("Por favor, ingresa correo y contraseña");
       return;
     }
 
     setState(() => _isLoading = true);
 
     try {
-      // 1. Consultamos la lista de usuarios en Vercel
       final response = await http.get(Uri.parse(_urlUsuarios));
-      
+
       if (response.statusCode == 200) {
         List<dynamic> usuarios = jsonDecode(response.body);
-        
-        // 2. Buscamos si el email existe
-        // Nota: Usamos 'email' porque es como lo definimos en el Dashboard/Vercel
+
         var usuarioEncontrado = usuarios.firstWhere(
           (u) => u['email'] == email,
           orElse: () => null,
         );
 
         if (usuarioEncontrado != null) {
-          // 3. ¡Éxito! Guardamos la sesión en el dispositivo
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setBool('isLoggedIn', true);
-          await prefs.setString('userName', usuarioEncontrado['nombre'] ?? 'Usuario');
-          await prefs.setString('userEmail', usuarioEncontrado['email'] ?? email);
-          await prefs.setString('userRole', usuarioEncontrado['rol'] ?? 'peaton');
+          // ==========================================
+          // 🔑 VALIDACIÓN DE CONTRASEÑA
+          // ==========================================
+          if (usuarioEncontrado['password'] == password) {
+            final prefs = await SharedPreferences.getInstance();
+            // Dentro de tu _intentarLogin en LoginPage.dart
+            await prefs.setBool('isLoggedIn', true);
+            await prefs.setString(
+              'user_nombre',
+              usuarioEncontrado['nombre'] ?? 'Usuario',
+            ); // Cambiado a user_nombre
+            await prefs.setString(
+              'user_email',
+              usuarioEncontrado['email'] ?? email,
+            ); // Cambiado a user_email
+            await prefs.setString(
+              'user_rol',
+              usuarioEncontrado['rol'] ?? 'peaton',
+            );
 
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("¡Bienvenido, ${usuarioEncontrado['nombre']}!"), backgroundColor: Colors.green),
-            );
-            // Vamos a la Home y quitamos el Login del historial
-            Navigator.pushReplacement(
-              context, 
-              MaterialPageRoute(builder: (_) => const HomePage())
-            );
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text("¡Bienvenido, ${usuarioEncontrado['nombre']}!"),
+                  backgroundColor: Colors.green,
+                ),
+              );
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const HomePage()),
+              );
+            }
+          } else {
+            // Si el correo existe pero la contraseña no coincide
+            _showError("Contraseña incorrecta");
           }
+          // ==========================================
         } else {
           _showError("Correo no registrado. Por favor, crea una cuenta.");
         }
@@ -69,7 +89,6 @@ class _LoginPageState extends State<LoginPage> {
       }
     } catch (e) {
       _showError("Error de conexión. Revisa tu internet.");
-      debugPrint("Error Login: $e");
     } finally {
       setState(() => _isLoading = false);
     }
@@ -100,16 +119,20 @@ class _LoginPageState extends State<LoginPage> {
                     color: Colors.blue.shade50,
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(Icons.directions_car_filled, size: 80, color: Colors.blue.shade800),
+                  child: Icon(
+                    Icons.directions_car_filled,
+                    size: 80,
+                    color: Colors.blue.shade800,
+                  ),
                 ),
               ),
               const SizedBox(height: 30),
               Text(
                 "RouteMate",
                 style: TextStyle(
-                  fontSize: 32, 
-                  fontWeight: FontWeight.bold, 
-                  color: Colors.blue.shade900
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue.shade900,
                 ),
               ),
               const Text(
@@ -123,31 +146,57 @@ class _LoginPageState extends State<LoginPage> {
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
                 decoration: InputDecoration(
-                  labelText: "Correo Universitario",
-                  hintText: "ejemplo@ucol.mx",
+                  labelText: "Correo",
+                  hintText: "ejemplo@correo.mx",
                   prefixIcon: const Icon(Icons.alternate_email),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
                   filled: true,
                   fillColor: Colors.grey.shade50,
                 ),
               ),
               const SizedBox(height: 25),
 
-              // Botón de Entrar
-              _isLoading 
-                ? const CircularProgressIndicator()
-                : ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue.shade800,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size(double.infinity, 55),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                      elevation: 2,
-                    ),
-                    onPressed: _intentarLogin,
-                    child: const Text("Iniciar Sesión", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              // Input de Contraseña
+              TextField(
+                controller:
+                    _passController, // Asegúrate de haberlo declarado arriba
+                obscureText: true, // Esto oculta el texto (******)
+                decoration: InputDecoration(
+                  labelText: "Contraseña",
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
                   ),
-              
+                  filled: true,
+                  fillColor: Colors.grey.shade50,
+                ),
+              ),
+
+              // Botón de Entrar
+              _isLoading
+                  ? const CircularProgressIndicator()
+                  : ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.shade800,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(double.infinity, 55),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        elevation: 2,
+                      ),
+                      onPressed: _intentarLogin,
+                      child: const Text(
+                        "Iniciar Sesión",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+
               const SizedBox(height: 20),
 
               // Enlace a Registro
@@ -156,8 +205,17 @@ class _LoginPageState extends State<LoginPage> {
                 children: [
                   const Text("¿Aún no tienes cuenta?"),
                   TextButton(
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterPage())),
-                    child: Text("Regístrate", style: TextStyle(color: Colors.blue.shade800, fontWeight: FontWeight.bold)),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const RegisterPage()),
+                    ),
+                    child: Text(
+                      "Regístrate",
+                      style: TextStyle(
+                        color: Colors.blue.shade800,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ],
               ),

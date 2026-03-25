@@ -7,13 +7,22 @@ export default async function handler(request, response) {
       return response.status(200).json(viajes);
     }
 
-    if (request.method === 'POST') {
-      const nuevoViaje = request.body;
-      const viajesActuales = await kv.get('viajes') || [];
-      viajesActuales.push({ ...nuevoViaje, id: Date.now() }); // Le damos un ID único
-      await kv.set('viajes', viajesActuales);
-      return response.status(200).json({ status: 'success' });
-    }
+    // En tu api/viajes.js (sección POST)
+if (request.method === 'POST') {
+  const nuevoViaje = request.body;
+  const viajesActuales = await kv.get('viajes') || [];
+  
+  // Aseguramos que el nuevo viaje tenga una lista de pasajeros vacía al nacer
+  const viajeAGuardar = { 
+    ...nuevoViaje, 
+    id: Date.now(), 
+    pasajeros: [] // <--- Importante inicializarlo
+  };
+
+  viajesActuales.push(viajeAGuardar);
+  await kv.set('viajes', viajesActuales);
+  return response.status(200).json({ status: 'success' });
+}
   } catch (error) {
     return response.status(500).json({ error: error.message });
   }

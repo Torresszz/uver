@@ -18,6 +18,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
   final TextEditingController _nombreController = TextEditingController();
   final TextEditingController _correoController = TextEditingController();
+  final TextEditingController _passController = TextEditingController();
   final TextEditingController _telefonoController = TextEditingController();
 
   // Mapa para guardar las fotos seleccionadas
@@ -71,6 +72,7 @@ class _RegisterPageState extends State<RegisterPage> {
       final Map<String, dynamic> userData = {
         'nombre': _nombreController.text.trim(),
         'email': _correoController.text.trim(),
+        'password': _passController.text.trim(),
         'telefono': _telefonoController.text.trim(),
         'rol': tipoUsuario,
         'fecha_registro': DateTime.now().toIso8601String(),
@@ -193,7 +195,8 @@ class _RegisterPageState extends State<RegisterPage> {
             const SizedBox(height: 25),
             
             buildInput("Nombre completo", Icons.person_outline, _nombreController),
-            buildInput("Correo Institucional", Icons.email_outlined, _correoController, type: TextInputType.emailAddress),
+            buildInput("Correo", Icons.email_outlined, _correoController, type: TextInputType.emailAddress),
+            buildInput("Contraseña", Icons.lock_outline, _passController, type: TextInputType.text),
             buildInput("Teléfono", Icons.phone_android, _telefonoController, type: TextInputType.phone),
             
             const Divider(height: 40),
