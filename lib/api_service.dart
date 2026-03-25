@@ -61,7 +61,7 @@ class ApiService {
   }) async {
     try {
       final response = await http.post(
-        Uri.parse('https://uver-oxnw.vercel.app/api/reservar'),
+        Uri.parse('https://uver-oxnw.vercel.app/api/reservas'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'viajeId': viajeId,
