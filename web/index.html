@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="/">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="RouteMate Admin Dashboard">
+
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="uver_2">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>RouteMate Admin</title>
+  <link rel="manifest" href="manifest.json">
+
+  <script>
+    window.flutterWebRenderer = "html";
+  </script>
+</head>
+<body>
+  <div id="loading" style="display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; color: #2196F3;">
+    <div style="text-align: center;">
+      <h2>Cargando Dashboard...</h2>
+      <p>Iniciando sistema administrativo</p>
+    </div>
+  </div>
+
+  <script src="flutter_bootstrap.js" async></script>
+
+  <script>
+    window.addEventListener('load', function(ev) {
+      // El motor de Flutter se encarga de limpiar el body automáticamente
+    });
+  </script>
+</body>
+</html>

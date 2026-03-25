@@ -1,0 +1,36 @@
+name: uver_2
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.10.7 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # --- COMUNICACIÓN Y DATOS ---
+  http: ^1.1.0        # Bajé ligeramente la versión para mejor compatibilidad con SDK 3.10
+  geolocator: ^10.1.0 # Versión estable para tu rango de SDK
+  intl: ^0.18.1       # Útil para formatear fechas y dinero en el Dashboard
+
+  # --- MAPAS ---
+  flutter_map: ^6.1.0 # Versión probada y estable para Web/Vercel
+  latlong2: ^0.9.1
+
+  # --- UI ---
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0 # Ajustado a tu versión de SDK
+
+flutter:
+  uses-material-design: true
+
+  # Si vas a usar imágenes (logos, fotos de carros), descomenta esto:
+  # assets:
+  #   - assets/images/

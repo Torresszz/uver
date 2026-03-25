@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Panel de Administración - Uver</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #f4f4f9; }
+        h1 { color: #333; }
+        table { width: 100%; border-collapse: collapse; background: white; margin-bottom: 20px; }
+        th, td { padding: 12px; border: 1px solid #ddd; text-align: left; }
+        th { background: #007bff; color: white; }
+        .img-preview { width: 50px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>📋 Registros de Viajes y Raites</h1>
+    <div id="tabla-viajes">Cargando datos...</div>
+
+    <script>
+        async function cargarDatos() {
+            try {
+                const res = await fetch('/api/reports');
+                const datos = await res.json();
+                
+                let html = '<table><tr><th>ID</th><th>Tipo</th><th>Descripción</th><th>Fecha/Hora</th><th>Ubicación</th><th>Foto</th></tr>';
+                
+                datos.forEach(v => {
+                    html += `<tr>
+                        <td>${v.id}</td>
+                        <td>${v.tipo_incidente}</td>
+                        <td>${v.descripcion}</td>
+                        <td>${v.fecha_hora}</td>
+                        <td>${v.latitud}, ${v.longitud}</td>
+                        <td><img src="data:image/png;base64,${v.foto_base64}" class="img-preview" onclick="alert('Ver imagen completa en logs')"></td>
+                    </tr>`;
+                });
+                
+                html += '</table>';
+                document.getElementById('tabla-viajes').innerHTML = html;
+            } catch (e) {
+                document.getElementById('tabla-viajes').innerHTML = "Error al cargar o no hay datos aún.";
+            }
+        }
+        cargarDatos();
+        // Recargar cada 10 segundos automáticamente
+        setInterval(cargarDatos, 10000);
+    </script>
+</body>
+</html>
