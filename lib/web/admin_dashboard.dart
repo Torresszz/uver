@@ -12,47 +12,150 @@ class AdminDashboard extends StatefulWidget {
 
 class _AdminDashboardState extends State<AdminDashboard> {
   final ApiService _apiService = ApiService();
-  
-  // Control de navegación lateral
   String _seccionActual = "Resumen";
-
-  // URL para viajes
   final String _viajesUrl = 'https://uver-oxnw.vercel.app/api/viajes';
 
-  // Función para cambiar estado de usuario
-  Future<void> _actualizarEstado(String email, String nuevoEstado) async {
-    try {
-      final exito = await _apiService.cambiarEstadoUsuario(email, nuevoEstado);
+  // --- 1. FUNCIÓN PARA ELIMINAR USUARIO REAL (API) ---
+  Future<void> _eliminarUsuarioReal(String email) async {
+    bool confirmar = await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("¿Eliminar permanentemente?"),
+        content: Text("Esta acción borrará a $email de la base de datos de Vercel."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancelar")),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true), 
+            child: const Text("ELIMINAR", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))
+          ),
+        ],
+      ),
+    ) ?? false;
+
+    if (confirmar) {
+      final exito = await _apiService.eliminarUsuario(email);
       if (exito) {
-        setState(() {}); // Refrescar vista
+        setState(() {}); // Refrescar la vista actual
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Usuario $nuevoEstado"), backgroundColor: Colors.green),
+          const SnackBar(content: Text("Usuario eliminado con éxito"), backgroundColor: Colors.red),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Error al eliminar el usuario"), backgroundColor: Colors.orange),
         );
       }
-    } catch (e) {
-      debugPrint("Error: $e");
     }
   }
 
-  Future<void> _mostrarDialogoEliminar(String email) async {
-  bool confirmar = await showDialog(
+ // --- 1. FUNCIÓN PARA MOSTRAR CUALQUIER DOC BASE64 ---
+void _mostrarDocumento(String? base64String, String tipoDoc, String nombre) {
+  if (base64String == null || base64String.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("El usuario no subió $tipoDoc")),
+    );
+    return;
+  }
+
+  showDialog(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text("¿Eliminar usuario?"),
-      content: Text("Esta acción eliminará permanentemente a $email."),
+      title: Text("$tipoDoc de $nombre"),
+      content: SizedBox(
+        width: 500,
+        height: 500,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Image.memory(
+            base64Decode(base64String),
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) => 
+              const Center(child: Text("Error: El formato de imagen no es válido")),
+          ),
+        ),
+      ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancelar")),
-        TextButton(
-          onPressed: () => Navigator.pop(ctx, true), 
-          child: const Text("Eliminar", style: TextStyle(color: Colors.red))
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cerrar")),
+      ],
+    ),
+  );
+}
+
+// --- 2. TABLA ACTUALIZADA CON TRES ICONOS ---
+Widget _tablaCard(String title, List<dynamic> datos) {
+  return Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      color: Colors.white, 
+      borderRadius: BorderRadius.circular(15), 
+      boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)]
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            IconButton(icon: const Icon(Icons.refresh), onPressed: () => setState(() {})),
+          ],
+        ),
+        const Divider(),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            columns: const [
+              DataColumn(label: Text("Nombre")),
+              DataColumn(label: Text("Correo")),
+              DataColumn(label: Text("Rol")),
+              DataColumn(label: Text("Documentación")), // INE | PLACAS | LIC
+              DataColumn(label: Text("Acciones")),
+            ],
+            rows: datos.map((u) {
+              bool esConductor = u['rol'] == 'conductor';
+              return DataRow(cells: [
+                DataCell(Text(u['nombre'] ?? 'N/A')),
+                DataCell(Text(u['email'] ?? 'N/A')),
+                DataCell(Text(u['rol']?.toString().toUpperCase() ?? 'N/A')),
+                DataCell(
+                  Row(
+                    children: [
+                      // ICONO 1: INE (Para todos)
+                      IconButton(
+                        icon: Icon(Icons.badge, color: u['foto_ine'] != null ? Colors.blue : Colors.grey),
+                        onPressed: () => _mostrarDocumento(u['foto_ine'], "INE", u['nombre']),
+                        tooltip: "Ver INE",
+                      ),
+                      // ICONO 2: PLACAS (Solo conductores)
+                      if (esConductor)
+                        IconButton(
+                          icon: Icon(Icons.minor_crash, color: u['foto_placas'] != null ? Colors.orange : Colors.grey),
+                          onPressed: () => _mostrarDocumento(u['foto_placas'], "Placas", u['nombre']),
+                          tooltip: "Ver Placas/Tarjeta",
+                        ),
+                      // ICONO 3: LICENCIA (Solo conductores)
+                      if (esConductor)
+                        IconButton(
+                          icon: Icon(Icons.contact_page, color: u['foto_licencia'] != null ? Colors.green : Colors.grey),
+                          onPressed: () => _mostrarDocumento(u['foto_licencia'], "Licencia", u['nombre']),
+                          tooltip: "Ver Licencia",
+                        ),
+                    ],
+                  ),
+                ),
+                DataCell(
+                  IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    onPressed: () => _eliminarUsuarioReal(u['email']),
+                  )
+                ),
+              ]);
+            }).toList(),
+          ),
         ),
       ],
     ),
-  ) ?? false;
-
-  if (confirmar) {
-    _actualizarEstado(email, "Eliminado");
-  }
+  );
 }
 
   @override
@@ -61,7 +164,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       backgroundColor: Colors.grey[100],
       body: Row(
         children: [
-          // --- SIDEBAR ---
+          // SIDEBAR
           Container(
             width: 260,
             color: Colors.blue.shade900,
@@ -83,7 +186,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ),
           ),
 
-          // --- CONTENIDO DINÁMICO ---
+          // CONTENIDO DINÁMICO
           Expanded(
             child: Container(
               padding: const EdgeInsets.all(35),
@@ -95,23 +198,18 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  // Lógica de navegación interna
   Widget _obtenerVistaActual() {
     switch (_seccionActual) {
-      case "Resumen":
-        return _viewResumen();
-      case "Conductores":
-        return _viewUsuariosFiltrados("conductor");
-      case "Pasajeros":
-        return _viewUsuariosFiltrados("pasajero"); // También incluye 'peaton'
-      case "Viajes Activos":
-        return _viewViajes();
-      default:
-        return _viewResumen();
+      case "Resumen": return _viewResumen();
+      case "Conductores": return _viewUsuariosFiltrados("conductor");
+      case "Pasajeros": return _viewUsuariosFiltrados("pasajero");
+      case "Viajes Activos": return _viewViajes();
+      default: return _viewResumen();
     }
   }
 
-  // --- VISTA 1: RESUMEN GENERAL ---
+  // --- VISTAS ESPECÍFICAS ---
+
   Widget _viewResumen() {
     return FutureBuilder<List<dynamic>>(
       future: _apiService.obtenerUsuarios(),
@@ -119,7 +217,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
         final usuarios = snapshot.data ?? [];
         int cond = usuarios.where((u) => u['rol'] == 'conductor').length;
         int pas = usuarios.where((u) => u['rol'] != 'conductor').length;
-        int pend = usuarios.where((u) => u['estado'] == 'Pendiente').length;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -129,7 +226,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
               children: [
                 _buildStatCard("Conductores", cond.toString(), Colors.blue),
                 _buildStatCard("Pasajeros", pas.toString(), Colors.green),
-                _buildStatCard("Por Validar", pend.toString(), Colors.orange),
               ],
             ),
             const SizedBox(height: 30),
@@ -140,7 +236,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  // --- VISTA 2: USUARIOS FILTRADOS ---
   Widget _viewUsuariosFiltrados(String rol) {
     return FutureBuilder<List<dynamic>>(
       future: _apiService.obtenerUsuarios(),
@@ -161,18 +256,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  // --- VISTA 3: VIAJES ---
   Widget _viewViajes() {
     return FutureBuilder<List<dynamic>>(
       future: http.get(Uri.parse(_viajesUrl)).then((res) => jsonDecode(res.body)),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-        final viajes = snapshot.data!;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _headerTitle("Viajes en Tiempo Real"),
-            _tablaCardViajes(viajes),
+            _tablaCardViajes(snapshot.data!),
           ],
         );
       },
@@ -185,21 +278,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 25),
       child: Text(title, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-    );
-  }
-
-  Widget _buildMenuItem(IconData icon, String title, bool isSelected, {bool isLogout = false}) {
-    return ListTile(
-      leading: Icon(icon, color: isSelected ? Colors.white : Colors.white60),
-      title: Text(title, style: TextStyle(color: isSelected ? Colors.white : Colors.white60, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-      selected: isSelected,
-      onTap: () {
-        if (isLogout) {
-          Navigator.pushReplacementNamed(context, '/login');
-        } else {
-          setState(() => _seccionActual = title);
-        }
-      },
     );
   }
 
@@ -224,91 +302,19 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  Widget _tablaCard(String title, List<dynamic> datos) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15), boxShadow: [const BoxShadow(color: Colors.black12, blurRadius: 10)]),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              IconButton(icon: const Icon(Icons.refresh), onPressed: () => setState(() {})),
-            ],
-          ),
-          const Divider(),
-          datos.isEmpty 
-          ? const Center(child: Padding(padding: EdgeInsets.all(20), child: Text("No hay datos disponibles")))
-          : SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                columns: const [
-                  DataColumn(label: Text("Nombre")),
-                  DataColumn(label: Text("Correo")),
-                  DataColumn(label: Text("Rol")),
-                  DataColumn(label: Text("Estado")),
-                  DataColumn(label: Text("Acciones")),
-                ],
-                rows: datos.map((u) => _buildUserRow(u)).toList(),
-              ),
-            ),
-        ],
-      ),
+  Widget _buildMenuItem(IconData icon, String title, bool isSelected, {bool isLogout = false}) {
+    return ListTile(
+      leading: Icon(icon, color: isSelected ? Colors.white : Colors.white60),
+      title: Text(title, style: TextStyle(color: isSelected ? Colors.white : Colors.white60, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+      onTap: () {
+        if (isLogout) {
+          Navigator.pushReplacementNamed(context, '/login');
+        } else {
+          setState(() => _seccionActual = title);
+        }
+      },
     );
   }
-
-  DataRow _buildUserRow(dynamic user) {
-  String estado = user['estado'] ?? 'Pendiente';
-  String rol = user['rol']?.toString().toLowerCase() ?? 'peaton';
-  
-  // Lógica: Solo los conductores (o choferes) pueden ser aprobados
-  bool esConductor = (rol == 'conductor' || rol == 'chofer');
-  bool estaPendiente = (estado == "Pendiente" || estado == "pendiente");
-
-  return DataRow(cells: [
-    DataCell(Text(user['nombre'] ?? 'N/A')),
-    DataCell(Text(user['email'] ?? 'N/A')),
-    DataCell(Text(rol.toUpperCase())),
-    DataCell(Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: estaPendiente ? Colors.orange[50] : Colors.green[50], 
-        borderRadius: BorderRadius.circular(8)
-      ),
-      child: Text(
-        estado, 
-        style: TextStyle(
-          color: estaPendiente ? Colors.orange[900] : Colors.green[900], 
-          fontWeight: FontWeight.bold, 
-          fontSize: 12
-        )
-      ),
-    )),
-    DataCell(Row(
-      children: [
-        // BOTÓN APROBAR: Solo aparece si es conductor Y está pendiente
-        if (esConductor && estaPendiente)
-          IconButton(
-            icon: const Icon(Icons.check_circle, color: Colors.green),
-            tooltip: "Aprobar Conductor",
-            onPressed: () => _actualizarEstado(user['email'], "Aceptado"),
-          )
-        else if (!esConductor)
-          const SizedBox(width: 48), // Espacio vacío para mantener la alineación si no es conductor
-
-        // BOTÓN ELIMINAR: Siempre visible para todos
-        IconButton(
-          icon: const Icon(Icons.delete, color: Colors.red),
-          tooltip: "Eliminar Usuario",
-          onPressed: () => _mostrarDialogoEliminar(user['email']),
-        ),
-      ],
-    )),
-  ]);
-}
 
   Widget _tablaCardViajes(List<dynamic> viajes) {
     return Container(

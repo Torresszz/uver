@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import '../pages/home_page.dart';
 import '../widgets/app_drawer.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'package:intl/intl.dart'; // Para manejar horas y fechas
-import 'package:url_launcher/url_launcher.dart';
+import '../api_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class MapaViajesScreen extends StatefulWidget {
   final LatLng? centroInicial;
@@ -17,8 +16,10 @@ class MapaViajesScreen extends StatefulWidget {
 }
 
 class _MapaViajesScreenState extends State<MapaViajesScreen> {
-  // URL de tu API de viajes en Vercel
   final String _apiUrl = 'https://uver-oxnw.vercel.app/api/viajes';
+  
+  // Instancia del servicio para realizar la reserva
+  final ApiService _apiService = ApiService();
 
   Future<List<dynamic>> obtenerViajes() async {
     try {
@@ -26,22 +27,16 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
       if (response.statusCode == 200) {
         List<dynamic> todosLosViajes = jsonDecode(response.body);
 
-        // --- LÓGICA DE CADUCIDAD ---
-        // Filtramos para que solo aparezcan viajes cuya hora no haya pasado
+        // Lógica de filtrado por tiempo (opcional según tu API)
         DateTime ahora = DateTime.now();
-
         return todosLosViajes.where((viaje) {
           try {
-            // Asumimos que guardamos 'fecha_publicacion' o un campo 'hora' ISO8601
-            // Si guardas solo texto como "08:30 PM", la lógica requiere un parseo más complejo
             DateTime fechaViaje = DateTime.parse(
               viaje['fecha_publicacion'] ?? ahora.toString(),
             );
-            return fechaViaje.isAfter(
-              ahora.subtract(const Duration(hours: 2)),
-            ); // Ejemplo: Caduca 2h después
+            return fechaViaje.isAfter(ahora.subtract(const Duration(hours: 2)));
           } catch (e) {
-            return true; // Si hay error de formato, lo mostramos por si acaso
+            return true; 
           }
         }).toList();
       } else {
@@ -56,6 +51,7 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
   void _mostrarDetalleViaje(BuildContext context, dynamic viaje) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
         return Container(
@@ -68,8 +64,7 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 50,
-                height: 5,
+                width: 50, height: 5,
                 decoration: BoxDecoration(
                   color: Colors.grey[300],
                   borderRadius: BorderRadius.circular(10),
@@ -83,10 +78,7 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
                 ),
                 title: Text(
                   "${viaje['origen']} ➔ ${viaje['destino']}",
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                 ),
                 subtitle: Text("Sale a las: ${viaje['hora']}"),
               ),
@@ -94,61 +86,85 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _datoExtra(
-                    Icons.attach_money,
-                    "Cuota",
-                    "\$${viaje['cuota']}",
-                  ),
+                  _datoExtra(Icons.attach_money, "Cuota", "\$${viaje['cuota']}"),
                   _datoExtra(Icons.people, "Lugares", "${viaje['capacidad']}"),
                   _datoExtra(Icons.timer, "Duración", "${viaje['duracion']}"),
                 ],
               ),
-              const SizedBox(height: 20),
-              ElevatedButton(
+              const SizedBox(height: 25),
+              
+              // BOTÓN DE RESERVA (REEMPLAZA AL DE CORREO)
+              ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue.shade800,
-                  minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 55),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                 ),
+                icon: const Icon(Icons.event_seat),
+                label: const Text("Reservar Asiento", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 onPressed: () async {
-                  // Obtenemos el email que viene en los datos del viaje
-                  final String? emailConductor = viaje['conductorEmail'];
-                  final String destino = viaje['destino'] ?? "tu destino";
+  final String viajeId = viaje['id'].toString();
+  final String destino = viaje['destino'] ?? "tu destino";
 
-                  if (emailConductor != null && emailConductor.isNotEmpty) {
-                    final Uri emailUri = Uri(
-                      scheme: 'mailto',
-                      path: emailConductor,
-                      query:
-                          'subject=Interés en tu raite a $destino&body=Hola, vi tu viaje en RouteMate y me gustaría contactarte.',
-                    );
+  // 1. Obtener datos del pasajero de SharedPreferences
+  final prefs = await SharedPreferences.getInstance();
+  final String? emailPasajero = prefs.getString('email');
+  final String? nombrePasajero = prefs.getString('nombre'); // <-- Necesitamos este también
 
-                    if (await canLaunchUrl(emailUri)) {
-                      await launchUrl(emailUri);
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("No se pudo abrir la app de correo"),
-                        ),
-                      );
-                    }
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          "El conductor no proporcionó un correo válido",
-                        ),
-                      ),
-                    );
-                  }
-                },
-                child: const Text(
-                  "Contactar Conductor",
-                  style: TextStyle(color: Colors.white),
-                ),
+  if (emailPasajero == null || nombrePasajero == null) {
+    Navigator.pop(context); 
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Error: No se encontró sesión activa. Inicia sesión de nuevo.")),
+    );
+    return;
+  }
+
+  // 2. Diálogo de confirmación
+  bool confirmar = await showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text("Confirmar Reserva"),
+      content: Text("¿$nombrePasajero, quieres apartar tu lugar a $destino?"),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancelar")),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, true), 
+          child: const Text("Confirmar", style: TextStyle(fontWeight: FontWeight.bold))
+        ),
+      ],
+    ),
+  ) ?? false;
+
+  if (confirmar) {
+    try {
+      // 3. Llamada corregida con los 3 parámetros NOMBRADOS
+      final exito = await _apiService.reservarViaje(
+        viajeId: viajeId,
+        pasajeroEmail: emailPasajero,
+        pasajeroNombre: nombrePasajero, // <-- Ahora sí pasamos el nombre
+      );
+
+      if (exito) {
+        Navigator.pop(context); // Cierra el detalle del viaje
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("¡Lugar apartado con éxito!"),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        throw Exception("Error en el servidor");
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("No se pudo completar la reserva"), backgroundColor: Colors.red),
+      );
+    }
+  }
+},
               ),
+              const SizedBox(height: 10),
             ],
           ),
         );
@@ -171,10 +187,7 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text(
-          "Explorar Raites",
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-        ),
+        title: const Text("Explorar Raites", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white.withOpacity(0.9),
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
@@ -187,18 +200,13 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          // Generar marcadores
           List<Marker> marcadores = (snapshot.data ?? []).map((viaje) {
-            // Coordenadas por defecto (Colima) si no hay reales
-            double lat =
-                viaje['latitud'] ?? 19.2620 + (0.005 * (viaje['id'] % 10));
-            double lng =
-                viaje['longitud'] ?? -103.7229 + (0.005 * (viaje['id'] % 5));
+            double lat = viaje['latitud'] ?? 19.2620;
+            double lng = viaje['longitud'] ?? -103.7229;
 
             return Marker(
               point: LatLng(lat, lng),
-              width: 50,
-              height: 50,
+              width: 50, height: 50,
               child: GestureDetector(
                 onTap: () => _mostrarDetalleViaje(context, viaje),
                 child: Container(
@@ -206,15 +214,9 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
                     color: Colors.blue.shade800,
                     shape: BoxShape.circle,
                     border: Border.all(color: Colors.white, width: 2),
-                    boxShadow: const [
-                      BoxShadow(color: Colors.black26, blurRadius: 5),
-                    ],
+                    boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 5)],
                   ),
-                  child: const Icon(
-                    Icons.directions_car_filled,
-                    color: Colors.white,
-                    size: 25,
-                  ),
+                  child: const Icon(Icons.directions_car_filled, color: Colors.white, size: 25),
                 ),
               ),
             );
@@ -237,7 +239,7 @@ class _MapaViajesScreenState extends State<MapaViajesScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.white,
-        onPressed: () => setState(() {}), // Refrescar mapa
+        onPressed: () => setState(() {}),
         child: const Icon(Icons.refresh, color: Colors.blue),
       ),
     );
